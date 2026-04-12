@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Sentron Survival</title>
+    <link rel="manifest" href="manifest.json">
+    <style>
+        body { margin: 0; background: #000000; color: #00f2ff; font-family: 'Segoe UI', sans-serif; overflow: hidden; }
+        canvas { display: block; }
+        .ui { position: absolute; top: 15px; left: 15px; pointer-events: none; text-shadow: 0 0 10px #00f2ff; font-weight: bold; z-index: 5; }
+        
+        /* Master Menu Style - Rounded & Centered */
+        .menu { 
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
+            background: rgba(0, 0, 0, 0.9); border: 3px solid #00f2ff; border-radius: 25px; 
+            padding: 40px; text-align: center; box-shadow: 0 0 25px rgba(0, 242, 255, 0.4); 
+            display: none; z-index: 10; min-width: 300px;
+        }
+        .menu h1 { color: #ff0055; text-shadow: 0 0 15px #ff0055; margin-bottom: 20px; text-transform: uppercase; }
+        
+        /* Rounded Neon Buttons */
+        button { 
+            background: transparent; border: 2px solid #00f2ff; color: #00f2ff; 
+            padding: 12px; font-size: 18px; cursor: pointer; margin: 10px 0; 
+            transition: 0.3s; border-radius: 15px; display: block; width: 100%;
+        }
+        button:hover { background: #00f2ff; color: #000; box-shadow: 0 0 20px #00f2ff; }
+
+        #startMenu { display: block; }
+        #gameOver { border-color: #ff0055; box-shadow: 0 0 25px #ff0055; }
+    </style>
+</head>
+<body>
+    <div class="ui">
+        SCORE: <span id="scr">0</span> | HIGH: <span id="hscr">0</span><br>
+        PULSE: <span id="pCharge">READY</span> | SUPER: <span id="sCharge">WAIT</span>
+    </div>
+
+    <div id="startMenu" class="menu">
+        <img src="app-logo.png" style="width: 80px; margin-bottom: 10px; display: block; margin-left: auto; margin-right: auto;">
+        <h1>SENTRON SURVIVAL</h1>
+        <button onclick="initGame(1)">EASY MODE</button>
+        <button onclick="initGame(2)">MEDIUM MODE</button>
+        <button onclick="initGame(3)">HARD MODE</button>
+    </div>
+
+    <div id="pauseMenu" class="menu">
+        <h1>PAUSED</h1>
+        <button onclick="togglePause()">RESUME</button>
+        <button onclick="location.reload()">QUIT</button>
+    </div>
+
+    <div id="gameOver" class="menu">
+        <h1 style="color: #ff0055;">SYSTEM FAILURE</h1>
+        <p>SCORE: <span id="finalScr">0</span></p>
+        <button onclick="location.reload()">REBOOT</button>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+    <script src="game.js"></script>
+</body>
+</html>
+

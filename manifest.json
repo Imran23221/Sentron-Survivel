@@ -1,0 +1,15 @@
+{
+  "short_name": "Sentron",
+  "name": "Sentron Survival",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#00f2ff",
+  "icons": [
+    {
+      "src": "rocket.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
