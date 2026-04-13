@@ -3,6 +3,16 @@ const ctx = canvas.getContext('2d');
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
+let selectedShipSrc = 'rocket.png'; // Default ship
+
+function selectShip(src, id) {
+    selectedShipSrc = src;
+    
+    // Remove 'selected' border from all and add to the clicked one
+    document.querySelectorAll('.ship-choice').forEach(img => img.classList.remove('selected'));
+    document.getElementById(id).classList.add('selected');
+}
+
 const rocketImg = new Image(); rocketImg.src = 'rocket.png';
 
 let player = { x: canvas.width/2, y: canvas.height/2, vx: 0, vy: 0, size: 30 };
@@ -18,6 +28,7 @@ window.addEventListener('keydown', e => { if(e.key === 'Escape') togglePause(); 
 
 function initGame(level) {
     difficulty = level;
+    rocketImg.src = selectedShipSrc;
     document.getElementById('startMenu').style.display = 'none';
     
     // Only start if the image is actually loaded
