@@ -2,71 +2,55 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Sentron Survival</title>
-    <link rel="manifest" href="manifest.json">
+    <title>Sentron Survival: Sky High</title>
     <style>
-        body { margin: 0; background: #000000; color: #00f2ff; font-family: 'Segoe UI', sans-serif; overflow: hidden; }
+        body { margin: 0; background: #000510; color: #00f2ff; font-family: 'Segoe UI', sans-serif; overflow: hidden; }
         canvas { display: block; }
-        .ui { position: absolute; top: 15px; left: 15px; pointer-events: none; text-shadow: 0 0 10px #00f2ff; font-weight: bold; z-index: 5; }
         
-        /* Master Menu Style - Rounded & Centered */
+        /* UI Styling */
+        .ui { position: absolute; top: 15px; left: 15px; pointer-events: none; font-weight: bold; z-index: 5; }
+        .blue-neon { color: #00f2ff; text-shadow: 0 0 10px #00f2ff; margin-bottom: 5px; }
+        .yellow-neon { color: #ffff00; text-shadow: 0 0 10px #ffff00; }
+
+        /* Curved Menus */
         .menu { 
-            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
-            background: rgba(0, 0, 0, 0.9); border: 3px solid #00f2ff; border-radius: 25px; 
-            padding: 40px; text-align: center; box-shadow: 0 0 25px rgba(0, 242, 255, 0.4); 
-            display: none; z-index: 10; min-width: 300px;
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: rgba(0, 10, 30, 0.95); border: 3px solid #00f2ff; border-radius: 30px; 
+            padding: 30px; text-align: center; box-shadow: 0 0 30px rgba(0, 242, 255, 0.3);
+            display: none; z-index: 10; min-width: 350px;
         }
-        .menu h1 { color: #ff0055; text-shadow: 0 0 15px #ff0055; margin-bottom: 20px; text-transform: uppercase; }
+        #startMenu { display: block; }
+        h1 { color: #ff0055; text-shadow: 0 0 20px #ff0055; margin-bottom: 15px; }
         
-        /* Rounded Neon Buttons */
+        .ship-options { display: flex; justify-content: center; gap: 15px; margin: 20px 0; }
+        .ship-choice { 
+            width: 60px; height: 60px; cursor: pointer; border: 2px solid transparent; 
+            padding: 8px; transition: 0.4s; border-radius: 15px;
+        }
+        .ship-choice.selected { background: rgba(0, 242, 255, 0.2); border-color: #00f2ff; box-shadow: 0 0 15px #00f2ff; }
+
         button { 
-            background: transparent; border: 2px solid #00f2ff; color: #00f2ff; 
-            padding: 12px; font-size: 18px; cursor: pointer; margin: 10px 0; 
-            transition: 0.3s; border-radius: 15px; display: block; width: 100%;
+            background: transparent; border: 2px solid #00f2ff; color: #00f2ff;
+            padding: 12px; font-size: 16px; cursor: pointer; margin: 8px 0;
+            transition: 0.3s; border-radius: 20px; display: block; width: 100%; font-weight: bold;
         }
         button:hover { background: #00f2ff; color: #000; box-shadow: 0 0 20px #00f2ff; }
-        ship-options {
-    display: flex;
-    justify-content: center;
-    gap: 20px;
-    margin: 20px 0;
-}
-
-.ship-choice {
-    width: 60px;
-    height: 60px;
-    cursor: pointer;
-    border: 2px solid transparent;
-    padding: 5px;
-    transition: 0.3s;
-}
-
-.ship-choice.selected {
-    border-color: #00f2ff; /* Your signature blue! */
-    box-shadow: 0 0 15px #00f2ff;
-}
-
-        #startMenu { display: block; }
-        #gameOver { border-color: #ff0055; box-shadow: 0 0 25px #ff0055; }
     </style>
 </head>
 <body>
     <div class="ui">
-        SCORE: <span id="scr">0</span> | HIGH: <span id="hscr">0</span><br>
-        PULSE: <span id="pCharge">READY</span> | SUPER: <span id="sCharge">WAIT</span>
+        <div class="blue-neon">SCORE: <span id="scr">0</span> | HIGH: <span id="hscr">0</span></div>
+        <div class="blue-neon">PULSE TIMER (7s): <span id="pCharge">READY</span></div>
+        <div class="yellow-neon">SUPER PULSE (30s): <span id="sCharge">WAIT</span></div>
     </div>
 
     <div id="startMenu" class="menu">
-        <img src="app-logo.png" style="width: 80px; margin-bottom: 10px; display: block; margin-left: auto; margin-right: auto;">
         <h1>SENTRON SURVIVAL</h1>
-        <div id="shipSelection">
-    <h3>Pick Your Rocket</h3>
-    <div class="ship-options">
-        <img src="rocket.png" class="ship-choice selected" id="ship1" onclick="selectShip('rocket.png', 'ship1')">
-        <img src="rocket-gold.png" class="ship-choice" id="ship2" onclick="selectShip('rocket-gold.png', 'ship2')">
-        <img src="rocket-neon.png" class="ship-choice" id="ship3" onclick="selectShip('rocket-neon.png', 'ship3')">
-    </div>
-</div>
+        <div class="ship-options">
+            <img src="rocket.png" class="ship-choice selected" id="ship1" onclick="selectShip('rocket.png', 'ship1')">
+            <img src="rocket-gold.png" class="ship-choice" id="ship2" onclick="selectShip('rocket-gold.png', 'ship2')">
+            <img src="rocket-neon.png" class="ship-choice" id="ship3" onclick="selectShip('rocket-neon.png', 'ship3')">
+        </div>
         <button onclick="initGame(1)">EASY MODE</button>
         <button onclick="initGame(2)">MEDIUM MODE</button>
         <button onclick="initGame(3)">HARD MODE</button>
@@ -78,10 +62,9 @@
         <button onclick="location.reload()">QUIT</button>
     </div>
 
-    <div id="gameOver" class="menu">
-        <h1 style="color: #ff0055;">SYSTEM FAILURE</h1>
-        <p>SCORE: <span id="finalScr">0</span></p>
-        <button onclick="location.reload()">REBOOT</button>
+    <div id="gameOver" class="menu" style="border-color: #ff0055;">
+        <h1 style="color: #ff0055;">GAME OVER</h1>
+        <button onclick="location.reload()">RETRY</button>
     </div>
 
     <canvas id="gameCanvas"></canvas>
