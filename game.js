@@ -168,4 +168,3 @@ function animate() {
     draw();
     if (gameActive) requestAnimationFrame(animate);
 }
-
