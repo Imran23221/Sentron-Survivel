@@ -10,7 +10,10 @@ app = FastAPI()
 # This allows your game to talk to this python script
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://imran23221.github.io", 
+        "http://127.0.0.1:5500" # Keeps it working for your local tests too
+    ],
     allow_methods=["*"],
     allow_headers=["*"],
 )

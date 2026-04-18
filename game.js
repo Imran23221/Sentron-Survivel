@@ -194,16 +194,16 @@ function animate() {
 }
 async function logActivity(action) {
     try {
-        await fetch('https://literate-bassoon-pjvq4xxxv7v7hjrr-8001.app.github.dev/log', {
-            method: 'POST',
-            mode: 'cors', // Add this to allow the "handshake"
+        await fetch("https://literate-bassoon-pjvq4xxxv7v7hjrr-8001.app.github.dev/log", {
+            method: "POST",
+            mode: "cors", // Crucial for cross-site logging
             headers: {
-                'Content-Type': 'application/json'
+                "Content-Type": "application/json"
             },
             body: JSON.stringify({ "action": action })
         });
     } catch (e) {
-        // This keeps the game running if the terminal is off
+        // This keeps the game from crashing if the logger is off
     }
 }
 function quitGame() {
