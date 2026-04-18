@@ -7,12 +7,10 @@
         body { margin: 0; background: #000510; color: #00f2ff; font-family: 'Segoe UI', sans-serif; overflow: hidden; }
         canvas { display: block; }
         
-        /* UI Styling */
         .ui { position: absolute; top: 15px; left: 15px; pointer-events: none; font-weight: bold; z-index: 5; }
         .blue-neon { color: #00f2ff; text-shadow: 0 0 10px #00f2ff; margin-bottom: 5px; }
-        .yellow-neon { color: #ffff00; text-shadow: 0 0 10px #ffff00; }
+        .yellow-neon { color: #ffff00; text-shadow: 0 0 10px #ffff0000; padding: 2px 5px; background: rgba(255, 255, 0, 0.019); border-radius: 5px; }
 
-        /* Curved Menus */
         .menu { 
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
             background: rgba(0, 10, 30, 0.95); border: 3px solid #00f2ff; border-radius: 30px; 
@@ -23,10 +21,7 @@
         h1 { color: #ff0055; text-shadow: 0 0 20px #ff0055; margin-bottom: 15px; }
         
         .ship-options { display: flex; justify-content: center; gap: 15px; margin: 20px 0; }
-        .ship-choice { 
-            width: 60px; height: 60px; cursor: pointer; border: 2px solid transparent; 
-            padding: 8px; transition: 0.4s; border-radius: 15px;
-        }
+        .ship-choice { width: 60px; height: 60px; cursor: pointer; border: 2px solid transparent; padding: 8px; transition: 0.4s; border-radius: 15px; }
         .ship-choice.selected { background: rgba(0, 242, 255, 0.2); border-color: #00f2ff; box-shadow: 0 0 15px #00f2ff; }
 
         button { 
@@ -59,7 +54,7 @@
     <div id="pauseMenu" class="menu">
         <h1>PAUSED</h1>
         <button onclick="togglePause()">RESUME</button>
-        <button onclick="location.reload()">QUIT</button>
+        <button onclick="quitGame()">QUIT</button>
     </div>
 
     <div id="gameOver" class="menu" style="border-color: #ff0055;">
