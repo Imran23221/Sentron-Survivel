@@ -1,88 +1,81 @@
+import asyncio
 from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
+from rich.console import Console
+from rich.panel import Panel
 from datetime import datetime
-import uvicorn
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 
+# This allows your game to talk to this python script
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://imran23221.github.io", 
+        "http://127.0.0.1:5500" # Keeps it working for your local tests too
+    ],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# COLOR & STYLE DEFINITIONS
-RESET = "\033[0m"
-BOLD = "\033[1m"
-BLINK = "\033[5m"
-
-# Text Colors
-WHITE = "\033[97m"
-YELLOW = "\033[93m"
-BRIGHT_YELLOW = "\033[33;1m"
-RED = "\033[91m"
-BRIGHT_RED = "\033[31;1m"
-CYAN = "\033[96m"
-BLUE = "\033[94m"
-MAGENTA = "\033[95m"
-GREEN = "\033[92m"
-GOLD = "\033[38;5;220m"
-
-# Background Colors
-BG_RED = "\033[41m"
+console = Console()
 
 @app.post("/log")
 async def log_event(request: Request):
-    data = await request.json()
-    time = datetime.now().strftime("%H:%M:%S")
-    player = data.get("player", "Unknown")
-    action = data.get("action", "").upper()
-    
-    # 🎨 THE COLOR ENGINE
-    style = WHITE # Default
-    
-    # 💀 ELIMINATED: Bold Bright Yellow
-    if "ELIMINATED" in action or "DIED" in action:
-        style = BOLD + BRIGHT_YELLOW
-        
-    # 👹 BOSS: Blink, Gold text on Red Background
-    elif "BOSS" in action:
-        style = BLINK + GOLD + BG_RED
-        
-    # ⚡ PULSES
-    elif "SUPER PULSE" in action:
-        style = MAGENTA
-    elif "PULSE" in action:
-        style = CYAN # Standard pulse
-        
-    # ⚙️ MODES
-    elif "HARD MODE" in action:
-        style = RED
-    elif "MEDIUM MODE" in action:
-        style = YELLOW
-    elif "EASY MODE" in action:
-        style = BLUE
-        
-    # ⏸️ PAUSE / RESUME
-    elif "PAUSED" in action:
-        style = BOLD + YELLOW
-    elif "RESUMED" in action:
-        style = BOLD + GREEN
-        
-    # 🚪 QUIT / TERMINATED: Bold White
-    elif "TERMINATED" in action or "QUIT" in action:
-        style = BOLD + WHITE
-        
-    # 🌈 DEFAULT: White or Blue
-    else:
-        style = BLUE
+    try:
+        data = await request.json()
+    except:
+        return {"status": "error"}
 
-    # Print the line: [TIME] PLAYER -> ACTION (All colorized)
-    print(f"{RESET}[{time}] {GREEN}{player.upper()}{RESET} -> {style}{action}{RESET}")
-    return {"status": "success"}
+    time = datetime.now().strftime("%H:%M:%S")
+    action = data.get("action", "Unknown Action")
+
+    # 1. COLOR LOGIC
+    # Priority is given to Player Eliminated and Boss events
+    if "ELIMINATED" in action:
+        color = "bold yellow" # The "Golden" text
+        border_style = "bright_yellow" # The "Golden" border
+    elif "BOSS" in action:
+        color = "blink bold white on red"
+        border_style = "bright_red"
+    elif "Super Pulse" in action:
+        color = "bright_magenta"
+        border_style = "magenta"
+    elif "Standard Pulse" in action:
+        color = "cyan"
+        border_style = "blue"
+    elif "HARD" in action:
+        color = "red"
+        border_style = "red"
+    elif "MEDIUM" in action:
+        color = "yellow"
+        border_style = "yellow"
+    elif "EASY" in action:
+        color = "blue"
+        border_style = "blue"
+    elif "PAUSED" in action:
+        color = "bold yellow"
+        border_style = "yellow"
+    elif "RESUMED" in action:
+        color = "bold green"
+        border_style = "green"
+    elif "TERMINATED" in action or "Quit" in action:
+        color = "bold white"
+        border_style = "white"
+    else:
+        color = "white"
+        border_style = "blue"
+
+    # 2. THE DASHBOARD OUTPUT
+    console.print(Panel(
+        f"[bold cyan]{time}[/bold cyan] | [bold green]EVENT:[/bold green] [bold {color}]{action}[/bold {color}]", 
+        title="[bold red]SENTRON SURVIVAL DASHBOARD[/bold red]", 
+        border_style=border_style
+    ))
+
+    return {"status": "logged"}
 
 if __name__ == "__main__":
-    print(f"{BOLD}{CYAN}--- SENTRON SURVIVAL LIVE DASHBOARD ACTIVE ---{RESET}")
+    import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8001)
 

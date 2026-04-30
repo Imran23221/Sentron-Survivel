@@ -1,4 +1,3 @@
-let playerName = "Pilot"; // This stores the name from the prompt later
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 canvas.width = window.innerWidth;
@@ -20,7 +19,6 @@ let lastPulse = Date.now(), lastSuper = Date.now();
 let lastScoreUpdate = 0; 
 let nextBoss = Date.now() + 180000; 
 let flashColor = null, flashTimer = 0, isSuperActive = false;
-
 
 function selectShip(src, id) {
     selectedShipSrc = src;
@@ -105,18 +103,6 @@ function triggerPulse(isSuper) {
         isSuperActive = isSuper;
         if (isSuper) lastSuper = now; else lastPulse = now;
     }
-}
-
-// This function runs when the user clicks "Continue" on the Rules box
-function closeRules() {
-    let nameInput = prompt("ENTER PILOT IDENTIFICATION:", "Pilot");
-    playerName = nameInput ? nameInput : "Guest";
-    
-    // This hides the neon rules box
-    document.getElementById('rulesOverlay').style.display = 'none';
-    
-    // Sends the first log to your terminal
-    logActivity("JOINED THE BATTLE"); 
 }
 
 function update() {
@@ -207,20 +193,18 @@ function animate() {
     draw();
     if (gameActive) requestAnimationFrame(animate);
 }
-// This function sends the data to your Python Logger
 async function logActivity(action) {
     try {
-        await fetch("https://literate-bassoon-pjvq4xxxv7v7hjrr-8001.app.github.dev/log", {
+        await fetch("https://literate-bassoon-pjvq4xxxv7v7hjrr-8000.app.github.dev/log", {
             method: "POST",
-            mode: "cors",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ 
-                "player": playerName, 
-                "action": action 
-            })
+            mode: "cors", // Crucial for cross-site logging
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ "action": action })
         });
     } catch (e) {
-        console.log("Logger is offline or Port 8001 is Private.");
+        // This keeps the game from crashing if the logger is off
     }
 }
 function quitGame() {
