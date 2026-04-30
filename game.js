@@ -112,12 +112,16 @@ function closeRules() {
     let nameInput = prompt("ENTER PILOT IDENTIFICATION:", "Pilot");
     playerName = nameInput ? nameInput : "Guest";
     
-    // This hides the neon rules box
+    // 1. Hide the rules
     document.getElementById('rulesOverlay').style.display = 'none';
     
-    // Sends the first log to your terminal
+    // 2. SHOW the Start Menu (This prevents the freeze!)
+    // Make sure 'startMenu' matches the ID in your HTML
+    document.getElementById('startMenu').style.display = 'block';
+    
     logActivity("JOINED THE BATTLE"); 
 }
+
 
 function update() {
     if (!gameActive || isPaused) return;

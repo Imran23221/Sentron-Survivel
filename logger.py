@@ -2,6 +2,12 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
 import uvicorn
+import logging
+import os
+
+# --- SILENCE THE JUNK ---
+# This hides the "INFO: 200 OK" lines so your dashboard stays clean
+logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
 
 app = FastAPI()
 
@@ -16,73 +22,61 @@ app.add_middleware(
 RESET = "\033[0m"
 BOLD = "\033[1m"
 BLINK = "\033[5m"
-
-# Text Colors
-WHITE = "\033[97m"
+GREEN = "\033[92m"
+CYAN = "\033[96m"
 YELLOW = "\033[93m"
 BRIGHT_YELLOW = "\033[33;1m"
 RED = "\033[91m"
-BRIGHT_RED = "\033[31;1m"
-CYAN = "\033[96m"
-BLUE = "\033[94m"
 MAGENTA = "\033[95m"
-GREEN = "\033[92m"
+BLUE = "\033[94m"
+WHITE = "\033[97m"
 GOLD = "\033[38;5;220m"
-
-# Background Colors
 BG_RED = "\033[41m"
+
+def print_border():
+    print(f"{CYAN}=" * 60 + f"{RESET}")
 
 @app.post("/log")
 async def log_event(request: Request):
     data = await request.json()
     time = datetime.now().strftime("%H:%M:%S")
-    player = data.get("player", "Unknown")
+    player = data.get("player", "UNKNOWN").upper()
     action = data.get("action", "").upper()
     
     # 🎨 THE COLOR ENGINE
-    style = WHITE # Default
+    style = WHITE
     
-    # 💀 ELIMINATED: Bold Bright Yellow
     if "ELIMINATED" in action or "DIED" in action:
         style = BOLD + BRIGHT_YELLOW
-        
-    # 👹 BOSS: Blink, Gold text on Red Background
     elif "BOSS" in action:
         style = BLINK + GOLD + BG_RED
-        
-    # ⚡ PULSES
-    elif "SUPER PULSE" in action:
+    elif "SUPER" in action:
         style = MAGENTA
-    elif "PULSE" in action:
-        style = CYAN # Standard pulse
-        
-    # ⚙️ MODES
-    elif "HARD MODE" in action:
-        style = RED
-    elif "MEDIUM MODE" in action:
-        style = YELLOW
-    elif "EASY MODE" in action:
+    elif "STANDARD" in action:
         style = BLUE
-        
-    # ⏸️ PAUSE / RESUME
+    elif "HARD" in action:
+        style = RED
     elif "PAUSED" in action:
         style = BOLD + YELLOW
     elif "RESUMED" in action:
         style = BOLD + GREEN
-        
-    # 🚪 QUIT / TERMINATED: Bold White
-    elif "TERMINATED" in action or "QUIT" in action:
+    elif "TERMINATED" in action:
         style = BOLD + WHITE
-        
-    # 🌈 DEFAULT: White or Blue
     else:
-        style = BLUE
+        style = CYAN
 
-    # Print the line: [TIME] PLAYER -> ACTION (All colorized)
-    print(f"{RESET}[{time}] {GREEN}{player.upper()}{RESET} -> {style}{action}{RESET}")
+    # --- THE VISUAL DASHBOARD LINE ---
+    # This creates the "Dashboard" look with a border on the side
+    print(f"{CYAN}║ {RESET}[{time}] {GREEN}{player:<12}{RESET} ➔ {style}{action}{RESET}")
     return {"status": "success"}
 
 if __name__ == "__main__":
-    print(f"{BOLD}{CYAN}--- SENTRON SURVIVAL LIVE DASHBOARD ACTIVE ---{RESET}")
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    # Clear terminal on start
+    os.system('clear' if os.name == 'posix' else 'cls')
+    
+    print(f"{CYAN}╔" + "═" * 58 + "╗")
+    print(f"║{BOLD}{GOLD} SENTRON SURVIVAL: LIVE COMMAND CENTER {RESET}{CYAN}║")
+    print(f"╚" + "═" * 58 + "╝{RESET}")
+    
+    uvicorn.run(app, host="0.0.0.0", port=8001, log_level="warning")
 
