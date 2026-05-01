@@ -35,41 +35,15 @@ function goToShipSelect() {
     logActivity("PILOT LOGGED IN");
 }
 
-// Function to handle ship selection and logging
-function pickShip(shipName, shipColor) {
-    // 1. Update the game's current ship variable
-    currentShip = shipName; 
-    
-    // 2. (Optional) Update ship visual/color in game
-    console.log(`Ship changed to: ${shipName}`);
-
-    // 3. Broadcast to the Sentron Firewall Dashboard
-    // We send the ship name as the 'action'
-    logActivity(`PILOT SELECTED SHIP: ${shipName.toUpperCase()}`);
+function pickShip(src, id) {
+    selectedShipSrc = src;
+    document.querySelectorAll('.ship-card').forEach(c => c.classList.remove('selected'));
+    document.getElementById(id).classList.add('selected');
 }
-
-// Example: How to use it on your buttons
-document.getElementById('rocket-neon-btn').onclick = function() {
-    pickShip('Neon Interceptor', '#00ffff');
-};
-
-document.getElementById('rocket-gold-btn').onclick = function() {
-    pickShip('Gold Vanguard', '#ffcc00');
-};
 
 function startGame(level) {
     difficulty = level;
     shipImg.src = selectedShipSrc;
-    
-    // Define the mode name for the logger
-    let modeName = "NORMAL";
-    if (level === 1) modeName = "EASY";
-    if (level === 3) modeName = "HARDCORE";
-
-    // --- ADD THE LOG ACTIVITY HERE ---
-    logActivity(`MODE SET: ${modeName}`);
-    // ----------------------------------
-
     document.getElementById('shipMenu').style.display = 'none';
     document.getElementById('gameOverScreen').style.display = 'none';
     
@@ -83,6 +57,7 @@ function startGame(level) {
     lastScoreTime = Date.now();
     nextBossTime = Date.now() + 45000;
     
+    logActivity(`MISSION START: ${playerName}`);
     requestAnimationFrame(gameLoop);
 }
 
@@ -91,10 +66,6 @@ function togglePause() {
     if (!gameActive) return;
     isPaused = !isPaused;
     document.getElementById('pauseMenu').style.display = isPaused ? 'flex' : 'none';
-    
-    // Log the state change
-    logActivity(isPaused ? "GAME PAUSED" : "GAME RESUMED");
-
     if (!isPaused) requestAnimationFrame(gameLoop);
 }
 
@@ -111,15 +82,8 @@ function gameOver() {
 }
 
 function backToMenu() {
-    // --- ADD THE LOG ACTIVITY HERE ---
-    logActivity("PILOT QUIT TO MENU");
-    // ----------------------------------
-
     document.getElementById('gameOverScreen').style.display = 'none';
-    document.getElementById('pauseMenu').style.display = 'none'; // Ensure pause is hidden too
     document.getElementById('shipMenu').style.display = 'flex';
-    
-    gameActive = false; // Stop the game loop logic
 }
 
 // --- SHATTER & PARTICLES ---
