@@ -12,7 +12,6 @@ def log_activity():
     action = data.get('action', 'Unknown')
     timestamp = datetime.now().strftime("%H:%M:%S")
     
-    # Matching your visual terminal style
     print("╔══════════════════════════════════════════╗")
     print(f"║ [{timestamp}] PILOT: {player.upper():<15} ║")
     print(f"║ ACTION: {action:<32} ║")
@@ -21,5 +20,4 @@ def log_activity():
     return jsonify({"status": "success"}), 200
 
 if __name__ == '__main__':
-    # Running on 8001 as required by your JS fetch
     app.run(port=8001)
