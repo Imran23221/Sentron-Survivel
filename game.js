@@ -23,16 +23,19 @@ let nextBoss = Date.now() + 180000;
 let flashColor = null, flashTimer = 0, isSuperActive = false;
 
 function finalizeLogin() {
+    // 1. Grab the name from your new Red Neon input field
     const input = document.getElementById('playerInput').value;
+    
+    // 2. If they left it blank, call them 'Pilot', otherwise use their name
     playerName = input.trim() !== "" ? input : "Pilot";
     
-    // Hide the login box
+    // 3. Hide the Neon Login box (the red one)
     document.getElementById('loginOverlay').style.display = 'none';
     
-    // Show the ship selection menu (the one you already have)
+    // 4. Show the ship selection menu so they can pick a rocket
     document.getElementById('startMenu').style.display = 'block';
     
-    sessionStarted = true; 
+    // 5. Tell the terminal someone just logged in
     logActivity("JOINED THE BATTLE");
 }
 
