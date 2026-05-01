@@ -14,28 +14,27 @@
         }
         .ship-container { display: flex; gap: 20px; justify-content: center; margin: 20px 0; }
         .ship-choice { width: 80px; cursor: pointer; border: 2px solid transparent; padding: 10px; transition: 0.3s; }
-        .ship-choice:hover { border-color: #00f2ff; }
         .selected { border-color: #ff0044 !important; box-shadow: 0 0 10px #ff0044; }
-        .btn { background: #00f2ff; color: #000; border: none; padding: 10px 25px; margin: 5px; cursor: pointer; font-weight: bold; border-radius: 5px; }
+        .btn { background: #00f2ff; color: #000; border: none; padding: 12px 30px; margin: 10px; cursor: pointer; font-weight: bold; border-radius: 5px; font-family: 'Courier New'; }
         .ui { position: fixed; top: 20px; left: 20px; pointer-events: none; z-index: 50; }
         .stat-box { background: rgba(0, 0, 0, 0.7); padding: 10px; border-left: 4px solid #00f2ff; margin-bottom: 10px; }
     </style>
 </head>
 <body>
 
-<!-- THE NEON LOGIN BOX (Replaces the old rules bar) -->
+<!-- NEON RED LOGIN BOX -->
 <div id="loginOverlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 10000; display: flex; justify-content: center; align-items: center;">
     <div style="width: 420px; padding: 40px; background: #000; border: 3px solid #ff0044; border-radius: 20px; box-shadow: 0 0 30px #ff0044; text-align: center;">
-        <h1 style="color: #ff0044; text-shadow: 0 0 10px #ff0044; margin-top: 0;">SYSTEM ACCESS</h1>
-        <div style="color: #00f2ff; text-align: left; margin: 25px 0; font-size: 14px; line-height: 1.8; border: 1px solid rgba(0, 242, 255, 0.3); padding: 15px; border-radius: 10px;">
+        <h1 style="color: #ff0044; text-shadow: 0 0 10px #ff0044;">SYSTEM ACCESS</h1>
+        <div style="color: #00f2ff; text-align: left; margin: 20px 0; font-size: 14px; border: 1px solid #00f2ff33; padding: 15px;">
             <p>🖱️ <b>MOVE:</b> Mouse Follow</p>
-            <p>⏸️ <b>PAUSE:</b> 'ESC' Key</p>
+            <p>⏸️ <b>PAUSE:</b> ESC Key</p>
             <p>💥 <b>PULSE:</b> Left Click</p>
             <p>⚡ <b>SUPER:</b> Right Click</p>
         </div>
-        <input type="text" id="playerInput" placeholder="ENTER PILOT NAME" maxlength="12" style="width: 85%; padding: 12px; background: #111; border: 2px solid #ff0044; color: #ff0044; border-radius: 5px; text-align: center; font-weight: bold; outline: none; margin-bottom: 25px; font-family: 'Courier New';">
+        <input type="text" id="playerInput" placeholder="ENTER PILOT NAME" style="width: 80%; padding: 10px; background: #111; border: 2px solid #ff0044; color: #ff0044; text-align: center; font-weight: bold; margin-bottom: 20px; outline: none;">
         <br>
-        <button onclick="finalizeLogin()" style="padding: 15px 45px; background: #ff0044; color: white; border: none; border-radius: 10px; cursor: pointer; font-weight: bold; text-transform: uppercase; box-shadow: 0 0 15px #ff0044;">Enter Battle</button>
+        <button onclick="finalizeLogin()" style="padding: 15px 40px; background: #ff0044; color: white; border: none; cursor: pointer; font-weight: bold;">ENTER BATTLE</button>
     </div>
 </div>
 
@@ -58,7 +57,7 @@
 </div>
 
 <div id="pauseMenu" class="menu" style="display: none;">
-    <h1 style="color: #ffff00;">PAUSED</h1>
+    <h1 style="color: #ffff00;">SYSTEM PAUSED</h1>
     <button class="btn" onclick="togglePause()">RESUME</button>
     <button class="btn" onclick="quitGame()" style="background: #ff0044; color: #fff;">QUIT</button>
 </div>

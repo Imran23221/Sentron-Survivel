@@ -8,11 +8,10 @@ CORS(app)
 @app.route('/log', methods=['POST'])
 def log_activity():
     data = request.json
-    player = data.get('player', 'Unknown')
-    action = data.get('action', 'No Action')
+    player = data.get('player', 'Pilot')
+    action = data.get('action', 'Unknown')
     timestamp = datetime.now().strftime("%H:%M:%S")
     
-    # Bordered Terminal Output
     print("╔══════════════════════════════════════════╗")
     print(f"║ [{timestamp}] PILOT: {player.upper():<15} ║")
     print(f"║ ACTION: {action:<32} ║")
