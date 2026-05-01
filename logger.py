@@ -1,38 +1,24 @@
-from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
+from flask import Flask, request, jsonify
+from flask_cors import CORS
 from datetime import datetime
-import uvicorn
-import logging
-import os
 
-logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
-app = FastAPI()
+app = Flask(__name__)
+CORS(app)
 
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
-
-# Colors
-CYAN, GREEN, YELLOW, RED, RESET = "\033[96m", "\033[92m", "\033[93m", "\033[91m", "\033[0m"
-MAGENTA, GOLD, BG_RED, BOLD = "\033[95m", "\033[38;5;220m", "\033[41m", "\033[1m"
-
-@app.post("/log")
-async def log_event(request: Request):
-    data = await request.json()
-    time = datetime.now().strftime("%H:%M:%S")
-    player = data.get("player", "UNKNOWN").upper()
-    action = data.get("action", "").upper()
+@app.route('/log', methods=['POST'])
+def log_activity():
+    data = request.json
+    player = data.get('player', 'Unknown')
+    action = data.get('action', 'No Action')
+    timestamp = datetime.now().strftime("%H:%M:%S")
     
-    # Logic for colors
-    style = RED if "ELIMINATED" in action else (MAGENTA if "SUPER" in action else CYAN)
-    if "BOSS" in action: style = GOLD + BG_RED
+    # Bordered Terminal Output
+    print("╔══════════════════════════════════════════╗")
+    print(f"║ [{timestamp}] PILOT: {player.upper():<15} ║")
+    print(f"║ ACTION: {action:<32} ║")
+    print("╚══════════════════════════════════════════╝")
+    
+    return jsonify({"status": "success"}), 200
 
-    # THE BORDERED INFO BOX
-    print(f"{CYAN}┌──────────────────────┬──────────────────┬────────────────────────────┐{RESET}")
-    print(f"{CYAN}│ {YELLOW}{time} {CYAN}│ {GREEN}{player:^16} {CYAN}│ {style}{action:^26} {CYAN}│{RESET}")
-    print(f"{CYAN}└──────────────────────┴──────────────────┴────────────────────────────┘{RESET}")
-    return {"status": "success"}
-
-if __name__ == "__main__":
-    os.system('clear' if os.name == 'posix' else 'cls')
-    print(f"{GOLD}{BOLD}=== SENTRON SURVIVAL: LIVE COMMAND CENTER ==={RESET}")
-    uvicorn.run(app, host="0.0.0.0", port=8001, log_level="warning")
-
+if __name__ == '__main__':
+    app.run(port=8001)
