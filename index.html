@@ -32,15 +32,23 @@
         button:hover { background: #00f2ff; color: #000; box-shadow: 0 0 20px #00f2ff; }
     </style>
 </head>
-<div id="rulesOverlay" style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 350px; padding: 25px; background: rgba(0, 0, 10, 0.95); border: 3px solid #00f2ff; border-radius: 20px; color: #00f2ff; box-shadow: 0 0 20px #00f2ff; text-align: center; z-index: 9999; font-family: 'Segoe UI', sans-serif;">
-    <h1 style="text-shadow: 0 0 10px #00f2ff;">SENTRON RULES</h1>
-    <div style="text-align: left; font-size: 15px; margin-bottom: 20px; line-height: 1.8;">
-        <p>🖱️ <b>MOVEMENT:</b> Follows Mouse Pointer</p>
-        <p>⏸️ <b>PAUSE:</b> Press 'ESC' Key</p>
-        <p>💥 <b>PULSE:</b> Left Click</p>
-        <p>⚡ <b>SUPER PULSE:</b> Right Click</p>
-        <p>👾 <b>GOAL:</b> Survive the Sky High Swarm!</p>
+<div id="loginOverlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 10000; display: flex; justify-content: center; align-items: center;">
+    <div style="width: 400px; padding: 40px; background: #000; border: 3px solid #ff0044; border-radius: 20px; box-shadow: 0 0 30px #ff0044; text-align: center; font-family: 'Courier New', monospace;">
+        <h1 style="color: #ff0044; text-shadow: 0 0 10px #ff0044;">SYSTEM ACCESS</h1>
+        
+        <div style="color: #00f2ff; text-align: left; margin: 20px 0; font-size: 14px;">
+            <p>🖱️ <b>MOVE:</b> Mouse Follow</p>
+            <p>⏸️ <b>PAUSE:</b> ESC Key</p>
+            <p>💥 <b>PULSE:</b> Left Click</p>
+            <p>⚡ <b>SUPER:</b> Right Click</p>
+        </div>
+
+        <input type="text" id="playerInput" placeholder="ENTER PILOT NAME" maxlength="12" style="width: 80%; padding: 10px; background: #111; border: 2px solid #ff0044; color: #ff0044; border-radius: 5px; text-align: center; font-weight: bold; outline: none; margin-bottom: 20px;">
+        
+        <br>
+        <button onclick="finalizeLogin()" style="padding: 12px 40px; background: #ff0044; color: white; border: none; border-radius: 10px; cursor: pointer; font-weight: bold; text-transform: uppercase; box-shadow: 0 0 15px #ff0044;">Enter Battle</button>
     </div>
+</div>
     <button onclick="closeRules()" style="background: #00f2ff; color: black; border: none; padding: 12px 35px; border-radius: 10px; font-weight: bold; cursor: pointer; text-transform: uppercase; box-shadow: 0 0 10px #00f2ff;">Continue to Game</button>
 </div>
 

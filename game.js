@@ -1,4 +1,5 @@
-let playerName = "Pilot"; // This stores the name from the prompt later
+let playerName = "Pilot";
+let sessionStarted = false;
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 canvas.width = window.innerWidth;
@@ -21,6 +22,19 @@ let lastScoreUpdate = 0;
 let nextBoss = Date.now() + 180000; 
 let flashColor = null, flashTimer = 0, isSuperActive = false;
 
+function finalizeLogin() {
+    const input = document.getElementById('playerInput').value;
+    playerName = input.trim() !== "" ? input : "Pilot";
+    
+    // Hide the login box
+    document.getElementById('loginOverlay').style.display = 'none';
+    
+    // Show the ship selection menu (the one you already have)
+    document.getElementById('startMenu').style.display = 'block';
+    
+    sessionStarted = true; 
+    logActivity("JOINED THE BATTLE");
+}
 
 function selectShip(src, id) {
     selectedShipSrc = src;
@@ -162,7 +176,10 @@ function update() {
         document.getElementById('hscr').innerText = highScore;
     }
     
-    if (!gameActive) document.getElementById('gameOver').style.display = 'block';
+    if (!gameActive) {
+    document.getElementById('startMenu').style.display = 'block'; // Shows Ship Pick
+    document.getElementById('gameOver').style.display = 'none'; // Hides "Game Over" text
+    }
 }
 
 function draw() {
