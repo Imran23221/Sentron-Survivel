@@ -3,66 +3,100 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SENTRON SURVIVAL</title>
+    <title>SENTRON SURVIVAL: ARMAGEDDON</title>
     <style>
         body { margin: 0; overflow: hidden; background: #000; color: #fff; font-family: 'Courier New', monospace; }
-        canvas { display: block; }
-        .menu {
-            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            text-align: center; background: rgba(0, 0, 0, 0.9); padding: 30px;
-            border: 2px solid #00f2ff; border-radius: 15px; box-shadow: 0 0 20px #00f2ff; z-index: 100;
+        canvas { display: block; filter: contrast(1.2) brightness(1.1); }
+        
+        /* Containers */
+        .menu-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; justify-content: center; align-items: center;
+            background: rgba(0, 0, 0, 0.9); z-index: 1000;
         }
-        .ship-container { display: flex; gap: 20px; justify-content: center; margin: 20px 0; }
-        .ship-choice { width: 80px; cursor: pointer; border: 2px solid transparent; padding: 10px; transition: 0.3s; }
-        .selected { border-color: #ff0044 !important; box-shadow: 0 0 10px #ff0044; }
-        .btn { background: #00f2ff; color: #000; border: none; padding: 12px 30px; margin: 10px; cursor: pointer; font-weight: bold; border-radius: 5px; font-family: 'Courier New'; }
-        .ui { position: fixed; top: 20px; left: 20px; pointer-events: none; z-index: 50; }
-        .stat-box { background: rgba(0, 0, 0, 0.7); padding: 10px; border-left: 4px solid #00f2ff; margin-bottom: 10px; }
+
+        .terminal-box {
+            width: 500px; padding: 40px; background: #000;
+            border: 3px solid #ff0044; border-radius: 20px;
+            box-shadow: 0 0 40px #ff0044; text-align: center;
+        }
+
+        /* Ship Selection */
+        .ship-grid { display: flex; gap: 15px; justify-content: center; margin: 25px 0; }
+        .ship-card { 
+            width: 90px; padding: 10px; border: 2px solid #333; 
+            cursor: pointer; transition: 0.3s; border-radius: 10px;
+        }
+        .ship-card:hover { border-color: #00f2ff; transform: scale(1.05); }
+        .selected { border-color: #ff0044 !important; box-shadow: 0 0 15px #ff0044; background: rgba(255, 0, 68, 0.1); }
+        .ship-card img { width: 100%; height: auto; }
+
+        .btn { 
+            background: #ff0044; color: white; border: none; padding: 15px 40px; 
+            font-weight: bold; cursor: pointer; border-radius: 5px; 
+            text-transform: uppercase; margin: 10px; font-family: 'Courier New';
+        }
+        .btn:hover { background: #ff3366; box-shadow: 0 0 20px #ff0044; }
+
+        /* HUD */
+        .ui-layer { position: fixed; top: 20px; left: 20px; pointer-events: none; z-index: 100; }
+        .hud-item { background: rgba(0,0,0,0.8); padding: 12px; border-left: 5px solid #ff0044; margin-bottom: 8px; font-size: 18px; }
+        
+        #gameOverScreen { display: none; flex-direction: column; }
+        .score-big { font-size: 48px; color: #00f2ff; text-shadow: 0 0 20px #00f2ff; margin: 20px 0; }
     </style>
 </head>
 <body>
 
-<!-- NEON RED LOGIN BOX -->
-<div id="loginOverlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 10000; display: flex; justify-content: center; align-items: center;">
-    <div style="width: 420px; padding: 40px; background: #000; border: 3px solid #ff0044; border-radius: 20px; box-shadow: 0 0 30px #ff0044; text-align: center;">
-        <h1 style="color: #ff0044; text-shadow: 0 0 10px #ff0044;">SYSTEM ACCESS</h1>
-        <div style="color: #00f2ff; text-align: left; margin: 20px 0; font-size: 14px; border: 1px solid #00f2ff33; padding: 15px;">
-            <p>🖱️ <b>MOVE:</b> Mouse Follow</p>
-            <p>⏸️ <b>PAUSE:</b> ESC Key</p>
-            <p>💥 <b>PULSE:</b> Left Click</p>
-            <p>⚡ <b>SUPER:</b> Right Click</p>
+<!-- PHASE 1: LOGIN -->
+<div id="loginOverlay" class="menu-overlay">
+    <div class="terminal-box">
+        <h1 style="color: #ff0044; letter-spacing: 5px;">SYSTEM ACCESS</h1>
+        <hr style="border: 1px solid #333; margin: 20px 0;">
+        <input type="text" id="playerInput" placeholder="ENTER PILOT ID" maxlength="12" 
+               style="width: 80%; padding: 15px; background: #111; border: 2px solid #ff0044; color: #ff0044; text-align: center; font-size: 20px; outline: none;">
+        <p style="color: #666; font-size: 12px; margin-top: 20px;">[SECURE CONNECTION ESTABLISHED]</p>
+        <button class="btn" onclick="goToShipSelect()">Initialize</button>
+    </div>
+</div>
+
+<!-- PHASE 2: SHIP SELECT -->
+<div id="shipMenu" class="menu-overlay" style="display: none;">
+    <div class="terminal-box" style="border-color: #00f2ff; box-shadow: 0 0 40px #00f2ff;">
+        <h2 style="color: #00f2ff;">SELECT YOUR CRAFT</h2>
+        <div class="ship-grid">
+            <div class="ship-card selected" id="s1" onclick="pickShip('rocket.png', 's1')">
+                <img src="rocket.png" alt="Ship 1"><p>SENTRON-X</p>
+            </div>
+            <div class="ship-card" id="s2" onclick="pickShip('rocket-neon.png', 's2')">
+                <img src="rocket-neon.png" alt="Ship 2"><p>NEON-V</p>
+            </div>
+            <div class="ship-card" id="s3" onclick="pickShip('rocket-gold.png', 's3')">
+                <img src="rocket-gold.png" alt="Ship 3"><p>ELITE-Z</p>
+            </div>
         </div>
-        <input type="text" id="playerInput" placeholder="ENTER PILOT NAME" style="width: 80%; padding: 10px; background: #111; border: 2px solid #ff0044; color: #ff0044; text-align: center; font-weight: bold; margin-bottom: 20px; outline: none;">
-        <br>
-        <button onclick="finalizeLogin()" style="padding: 15px 40px; background: #ff0044; color: white; border: none; cursor: pointer; font-weight: bold;">ENTER BATTLE</button>
+        <button class="btn" style="background:#00f2ff; color:#000;" onclick="startGame(1)">Easy</button>
+        <button class="btn" style="background:#00f2ff; color:#000;" onclick="startGame(2)">Normal</button>
+        <button class="btn" style="background:#00f2ff; color:#000;" onclick="startGame(3)">Hardcore</button>
     </div>
 </div>
 
-<div class="ui">
-    <div class="stat-box">SCORE: <span id="scr">0</span></div>
-    <div class="stat-box">HI-SCORE: <span id="hscr">0</span></div>
-    <div class="stat-box">PULSE: <span id="pCharge">READY</span></div>
-    <div class="stat-box">SUPER: <span id="sCharge">READY</span></div>
-</div>
-
-<div id="startMenu" class="menu" style="display: none;">
-    <h1 style="color: #00f2ff;">SENTRON SURVIVAL</h1>
-    <div class="ship-container">
-        <img src="rocket.png" id="ship1" class="ship-choice selected" onclick="selectShip('rocket.png', 'ship1')">
-        <img src="ufo.png" id="ship2" class="ship-choice" onclick="selectShip('ufo.png', 'ship2')">
+<!-- PHASE 3: GAME OVER -->
+<div id="gameOverScreen" class="menu-overlay">
+    <div class="terminal-box">
+        <h1 style="color: #ff0044;">PILOT ELIMINATED</h1>
+        <div class="score-big" id="finalScoreDisplay">0000</div>
+        <p id="rankText" style="color: #aaa;"></p>
+        <button class="btn" onclick="backToMenu()">Return to Hangar</button>
     </div>
-    <button class="btn" onclick="initGame(1)">EASY MODE</button>
-    <button class="btn" onclick="initGame(2)">MEDIUM MODE</button>
-    <button class="btn" onclick="initGame(3)">HARD MODE</button>
 </div>
 
-<div id="pauseMenu" class="menu" style="display: none;">
-    <h1 style="color: #ffff00;">SYSTEM PAUSED</h1>
-    <button class="btn" onclick="togglePause()">RESUME</button>
-    <button class="btn" onclick="quitGame()" style="background: #ff0044; color: #fff;">QUIT</button>
+<div class="ui-layer">
+    <div class="hud-item">SCORE: <span id="scr">0</span></div>
+    <div class="hud-item">PULSE: <span id="pCharge">READY</span></div>
+    <div class="hud-item">SUPER: <span id="sCharge">READY</span></div>
 </div>
 
-<div id="gameOver" style="display: none;"></div>
 <canvas id="gameCanvas"></canvas>
 <script src="game.js"></script>
 </body>

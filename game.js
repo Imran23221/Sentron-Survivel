@@ -1,94 +1,104 @@
-let playerName = "Pilot";
-let sessionStarted = false;
+// --- CONFIGURATION & STATE ---
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
-let selectedShipSrc = 'rocket.png';
-const rocketImg = new Image();
-rocketImg.src = 'rocket.png';
-
-let player = { x: canvas.width/2, y: canvas.height/2, size: 35, angle: 0 };
-let mouse = { x: canvas.width/2, y: canvas.height/2 };
-let enemies = [];
-let gameActive = false, isPaused = false;
-let score = 0, difficulty = 1;
+let playerName = "Unknown";
+let gameActive = false;
+let isPaused = false;
+let score = 0;
+let difficulty = 1;
 let highScore = localStorage.getItem('sentronHigh') || 0;
 
-let lastPulse = Date.now(), lastSuper = Date.now();
-let lastScoreUpdate = 0; 
-let nextBoss = Date.now() + 180000; 
-let flashColor = null, flashTimer = 0, isSuperActive = false;
+let selectedShipSrc = 'rocket.png';
+const shipImg = new Image();
 
-// UPGRADE: This replaces the old closeRules prompt logic
-function finalizeLogin() {
-    const input = document.getElementById('playerInput').value;
-    playerName = input.trim() !== "" ? input : "Pilot";
-    
-    // Hide the Neon Login box
+// Game Objects
+let player = { x: canvas.width/2, y: canvas.height/2, size: 38, angle: 0, targetX: 0, targetY: 0 };
+let enemies = [];
+let particles = [];
+let mouse = { x: canvas.width/2, y: canvas.height/2 };
+
+// Cooldowns
+let lastPulse = 0;
+let lastSuper = 0;
+let lastScoreTime = 0;
+let nextBossTime = Date.now() + 60000;
+
+// Visual Effects
+let screenShake = 0;
+let flashEffect = { timer: 0, color: '#fff', size: 0 };
+
+// --- MENU LOGIC ---
+function goToShipSelect() {
+    const val = document.getElementById('playerInput').value.trim();
+    playerName = val || "Pilot";
     document.getElementById('loginOverlay').style.display = 'none';
-    // Show the Ship Selection
-    document.getElementById('startMenu').style.display = 'block';
-    
-    sessionStarted = true;
-    logActivity("JOINED THE BATTLE");
+    document.getElementById('shipMenu').style.display = 'flex';
+    logActivity("AUTHENTICATED");
 }
 
-function selectShip(src, id) {
+function pickShip(src, id) {
     selectedShipSrc = src;
-    document.querySelectorAll('.ship-choice').forEach(img => img.classList.remove('selected'));
-    const selectedEl = document.getElementById(id);
-    if(selectedEl) selectedEl.classList.add('selected');
-    logActivity("Ship selected: " + id);
+    document.querySelectorAll('.ship-card').forEach(c => c.classList.remove('selected'));
+    document.getElementById(id).classList.add('selected');
 }
 
-window.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
-window.addEventListener('mousedown', e => {
-    if (!gameActive || isPaused) return;
-    if (e.button === 0) triggerPulse(false); 
-    if (e.button === 2) triggerPulse(true);  
-});
-window.addEventListener('contextmenu', e => e.preventDefault());
-window.addEventListener('keydown', e => { if(e.key === 'Escape') togglePause(); });
-
-function initGame(level) {
-    const modes = {1: "EASY", 2: "MEDIUM", 3: "HARD"};
+function startGame(level) {
     difficulty = level;
-    logActivity("System Initialized: " + modes[difficulty] + " MODE");
-    rocketImg.src = selectedShipSrc;
-    document.getElementById('startMenu').style.display = 'none';
-    gameActive = true;
+    shipImg.src = selectedShipSrc;
+    document.getElementById('shipMenu').style.display = 'none';
+    document.getElementById('gameOverScreen').style.display = 'none';
+    
+    // Reset Stats
     score = 0;
     enemies = [];
-    lastScoreUpdate = Date.now(); 
-    document.getElementById('hscr').innerText = Math.floor(highScore);
-    animate();
+    particles = [];
+    gameActive = true;
+    lastPulse = Date.now();
+    lastSuper = Date.now();
+    lastScoreTime = Date.now();
+    
+    logActivity(`STARTED MISSION [DIFF: ${level}]`);
+    requestAnimationFrame(gameLoop);
 }
 
-// UPGRADE: This ensures you go back to the menu correctly
 function gameOver() {
     gameActive = false;
-    logActivity("CRITICAL: PLAYER ELIMINATED - Score: " + score);
+    screenShake = 30;
     
-    // Hide game elements and show ONLY ship selection
-    document.getElementById('startMenu').style.display = 'block';
-    // Ensure the old text-based gameOver overlay is hidden
-    const goOverlay = document.getElementById('gameOver');
-    if(goOverlay) goOverlay.style.display = 'none';
+    // Update Score UI
+    document.getElementById('finalScoreDisplay').innerText = score;
+    let rank = "RECRUIT";
+    if (score > 100) rank = "VETERAN";
+    if (score > 500) rank = "ACE";
+    document.getElementById('rankText').innerText = `RANK: ${rank}`;
+    
+    document.getElementById('gameOverScreen').style.display = 'flex';
+    logActivity(`MISSION FAILED - SCORE: ${score}`);
 }
 
-function togglePause() {
-    isPaused = !isPaused;
-    const pMenu = document.getElementById('pauseMenu');
-    if(pMenu) pMenu.style.display = isPaused ? 'block' : 'none';
-    logActivity(isPaused ? "SYSTEM PAUSED" : "SYSTEM RESUMED");
+function backToMenu() {
+    document.getElementById('gameOverScreen').style.display = 'none';
+    document.getElementById('shipMenu').style.display = 'flex';
 }
 
+// --- INPUTS ---
+window.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
+window.addEventListener('mousedown', e => {
+    if (!gameActive) return;
+    if (e.button === 0) triggerPulse(false);
+    if (e.button === 2) triggerPulse(true);
+});
+window.addEventListener('contextmenu', e => e.preventDefault());
+
+// --- CORE LOGIC ---
 function spawnEnemy(isBoss = false) {
-    if (isBoss) logActivity("BOSS DETECTED: SENTRON ELITE UNIT");
-    const size = isBoss ? 95 : 28;
-    const speed = isBoss ? 0.7 : 1.3 + (difficulty * 0.8);
+    const size = isBoss ? 110 : 30;
+    const speed = isBoss ? 0.8 : (1.5 + (difficulty * 0.7));
+    const hp = isBoss ? 5 : 1;
+    
     let x, y;
     if (Math.random() < 0.5) {
         x = Math.random() < 0.5 ? -size : canvas.width + size;
@@ -97,132 +107,168 @@ function spawnEnemy(isBoss = false) {
         x = Math.random() * canvas.width;
         y = Math.random() < 0.5 ? -size : canvas.height + size;
     }
-    enemies.push({ x, y, size, speed, isBoss });
+    enemies.push({ x, y, size, speed, hp, isBoss, rot: Math.random() * Math.PI });
 }
 
 function triggerPulse(isSuper) {
     const now = Date.now();
-    const cooldown = isSuper ? 30000 : 7000;
-    const lastTime = isSuper ? lastSuper : lastPulse;
-    const range = isSuper ? 550 : 280;
+    const cd = isSuper ? 25000 : 6000;
+    const last = isSuper ? lastSuper : lastPulse;
+    const range = isSuper ? 600 : 300;
 
-    if (now - lastTime >= cooldown) {
-        logActivity(isSuper ? "Super Pulse Activated!" : "Pulse Activated!");
+    if (now - last >= cd) {
+        flashEffect = { timer: 25, color: isSuper ? '#ffff00' : '#00f2ff', size: range };
+        screenShake = 15;
+        
         enemies = enemies.filter(en => {
             const dist = Math.hypot(player.x - en.x, player.y - en.y);
             if (dist < range) {
-                if (en.isBoss && !isSuper) return true; 
+                if (en.isBoss && !isSuper) return true; // Normal pulse can't kill boss
+                createExplosion(en.x, en.y, en.isBoss ? 40 : 10);
                 return false;
             }
             return true;
         });
 
-        flashColor = isSuper ? "#ffff00" : "#00f2ff";
-        flashTimer = 30; 
-        isSuperActive = isSuper;
         if (isSuper) lastSuper = now; else lastPulse = now;
+        logActivity(isSuper ? "SUPERNOVA DEPLOYED" : "PULSE EMITTED");
+    }
+}
+
+function createExplosion(x, y, count) {
+    for (let i = 0; i < count; i++) {
+        particles.push({
+            x, y,
+            vx: (Math.random() - 0.5) * 10,
+            vy: (Math.random() - 0.5) * 10,
+            life: 1.0,
+            color: Math.random() > 0.5 ? '#ff0044' : '#ffaa00'
+        });
     }
 }
 
 function update() {
-    if (!gameActive || isPaused) return;
+    if (!gameActive) return;
 
-    let now = Date.now();
-    if (now - lastScoreUpdate >= 1000) {
-        score += 1;
-        lastScoreUpdate = now;
-    }
-    
-    // Original smooth movement with slight jitter
-    player.x += (mouse.x - player.x) * 0.12 + (Math.random() - 0.5) * 5;
-    player.y += (mouse.y - player.y) * 0.12 + (Math.random() - 0.5) * 5;
+    // Smooth Follow Physics
+    player.x += (mouse.x - player.x) * 0.12;
+    player.y += (mouse.y - player.y) * 0.12;
     player.angle = Math.atan2(mouse.y - player.y, mouse.x - player.x) + Math.PI/2;
 
-    document.getElementById('pCharge').innerText = (now - lastPulse >= 7000) ? "READY" : Math.ceil((7000 - (now - lastPulse))/1000) + "s";
-    document.getElementById('sCharge').innerText = (now - lastSuper >= 30000) ? "READY" : Math.ceil((30000 - (now - lastSuper))/1000) + "s";
-    
-    if (now > nextBoss) { spawnEnemy(true); nextBoss = now + 180000; }
-    if (Math.random() < 0.04 + (difficulty * 0.02)) spawnEnemy();
+    // Score Tick
+    if (Date.now() - lastScoreTime > 1000) {
+        score++;
+        lastScoreTime = Date.now();
+        document.getElementById('scr').innerText = score;
+    }
 
-    enemies.forEach(en => {
-        const dist = Math.hypot(player.x - en.x, player.y - en.y);
-        en.x += ((player.x - en.x) / dist) * en.speed;
-        en.y += ((player.y - en.y) / dist) * en.speed;
-        
-        if (dist < player.size * 0.8 + en.size) {
-            gameOver(); // Upgrade: Calls the new function instead of inlining
+    // HUD Updates
+    const pWait = Math.max(0, Math.ceil((6000 - (Date.now() - lastPulse))/1000));
+    const sWait = Math.max(0, Math.ceil((25000 - (Date.now() - lastSuper))/1000));
+    document.getElementById('pCharge').innerText = pWait === 0 ? "READY" : pWait + "S";
+    document.getElementById('sCharge').innerText = sWait === 0 ? "READY" : sWait + "S";
+
+    // Spawning
+    if (Math.random() < 0.03 + (difficulty * 0.015)) spawnEnemy(false);
+    if (Date.now() > nextBossTime) {
+        spawnEnemy(true);
+        nextBossTime = Date.now() + 45000;
+    }
+
+    // Enemy AI & Collision
+    enemies.forEach((en, i) => {
+        const d = Math.hypot(player.x - en.x, player.y - en.y);
+        en.x += ((player.x - en.x) / d) * en.speed;
+        en.y += ((player.y - en.y) / d) * en.speed;
+        en.rot += 0.02;
+
+        if (d < (player.size * 0.7) + (en.size * 0.7)) {
+            gameOver();
         }
     });
 
-    document.getElementById('scr').innerText = score;
-    if (score > highScore) {
-        highScore = score;
-        localStorage.setItem('sentronHigh', highScore);
-        document.getElementById('hscr').innerText = highScore;
-    }
+    // Particle Physics
+    particles.forEach((p, i) => {
+        p.x += p.vx; p.y += p.vy; p.life -= 0.02;
+        if (p.life <= 0) particles.splice(i, 1);
+    });
+
+    if (screenShake > 0) screenShake *= 0.9;
 }
 
 function draw() {
-    ctx.fillStyle = '#000510';
+    ctx.fillStyle = 'rgba(0, 5, 15, 0.3)'; // Motion Blur
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    if (flashTimer > 0) {
-        ctx.save();
-        let maxRange = isSuperActive ? 600 : 320;
-        let progress = 1 - (flashTimer / 30);
-        ctx.shadowBlur = 15;
-        ctx.shadowColor = flashColor;
-        ctx.strokeStyle = flashColor;
-        for (let i = 1; i <= 5; i++) {
-            let ringP = progress * (1 + i * 0.2); 
-            if (ringP > 1) ringP = 1;
-            ctx.beginPath();
-            ctx.arc(player.x, player.y, maxRange * ringP, 0, Math.PI * 2);
-            ctx.lineWidth = 6 * (1 - ringP);
-            ctx.globalAlpha = 1 - ringP;
-            ctx.stroke();
-        }
-        ctx.restore();
-        flashTimer--;
+    ctx.save();
+    if (screenShake > 1) {
+        ctx.translate((Math.random()-0.5)*screenShake, (Math.random()-0.5)*screenShake);
     }
 
+    // Draw Particles
+    particles.forEach(p => {
+        ctx.globalAlpha = p.life;
+        ctx.fillStyle = p.color;
+        ctx.fillRect(p.x, p.y, 4, 4);
+    });
+    ctx.globalAlpha = 1;
+
+    // Draw Enemies
     enemies.forEach(en => {
-        ctx.beginPath();
-        ctx.arc(en.x, en.y, en.size, 0, Math.PI*2);
-        ctx.shadowBlur = 25;
-        ctx.shadowColor = en.isBoss ? "#bc13fe" : "#ff0000"; 
-        ctx.fillStyle = en.isBoss ? "#bc13fe" : "#ff0000";
-        ctx.fill();
-        ctx.shadowBlur = 0;
+        ctx.save();
+        ctx.translate(en.x, en.y);
+        ctx.rotate(en.rot);
+        ctx.shadowBlur = en.isBoss ? 20 : 10;
+        ctx.shadowColor = en.isBoss ? '#bc13fe' : '#ff0044';
+        ctx.fillStyle = en.isBoss ? '#bc13fe' : '#ff0044';
+        
+        if (en.isBoss) {
+            ctx.strokeRect(-en.size/2, -en.size/2, en.size, en.size);
+            ctx.fillRect(-en.size/4, -en.size/4, en.size/2, en.size/2);
+        } else {
+            ctx.beginPath();
+            ctx.moveTo(0, -en.size/2);
+            ctx.lineTo(en.size/2, en.size/2);
+            ctx.lineTo(-en.size/2, en.size/2);
+            ctx.closePath();
+            ctx.fill();
+        }
+        ctx.restore();
     });
 
+    // Draw Player
     ctx.save();
     ctx.translate(player.x, player.y);
     ctx.rotate(player.angle);
-    ctx.drawImage(rocketImg, -player.size, -player.size, player.size*2, player.size*2);
+    ctx.shadowBlur = 15;
+    ctx.shadowColor = '#00f2ff';
+    ctx.drawImage(shipImg, -player.size, -player.size, player.size*2, player.size*2);
+    ctx.restore();
+
+    // Pulse Effect
+    if (flashEffect.timer > 0) {
+        ctx.beginPath();
+        ctx.arc(player.x, player.y, flashEffect.size * (1 - flashEffect.timer/25), 0, Math.PI*2);
+        ctx.strokeStyle = flashEffect.color;
+        ctx.lineWidth = flashEffect.timer;
+        ctx.stroke();
+        flashEffect.timer--;
+    }
+
     ctx.restore();
 }
 
-function animate() {
+function gameLoop() {
     update();
     draw();
-    if (gameActive) requestAnimationFrame(animate);
+    if (gameActive) requestAnimationFrame(gameLoop);
 }
 
 async function logActivity(action) {
     try {
         await fetch("https://literate-bassoon-pjvq4xxxv7v7hjrr-8001.app.github.dev/log", {
-            method: "POST",
-            mode: "cors",
-            headers: { "Content-Type": "application/json" },
+            method: "POST", mode: "cors", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ "player": playerName, "action": action })
         });
-    } catch (e) {
-        console.log("Logger offline.");
-    }
-}
-
-function quitGame() {
-    logActivity("SESSION TERMINATED: User Quit");
-    setTimeout(() => { location.reload(); }, 500);
+    } catch (e) { }
 }
