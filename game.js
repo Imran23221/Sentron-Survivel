@@ -1,4 +1,4 @@
-// --- INITIAL SETUP ---
+// --- CORE SETUP ---
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 canvas.width = window.innerWidth;
@@ -14,13 +14,14 @@ const shipImg = new Image();
 
 let player = { x: canvas.width/2, y: canvas.height/2, size: 38, angle: 0 };
 let enemies = [];
-let particles = [];
+let particles = []; // SHATTER EFFECT ARRAY
 let mouse = { x: canvas.width/2, y: canvas.height/2 };
 
 let lastPulse = 0, lastSuper = 0, lastScoreTime = 0;
 let nextBossTime = 0, flashEffect = { timer: 0, color: '#fff', size: 0 };
+let shakeAmt = 0; // GENTLE SHAKE
 
-// --- MENU FLOW (Fixing the "ReferenceError") ---
+// --- MENU NAVIGATION ---
 function showLogin() {
     document.getElementById('rulesOverlay').style.display = 'none';
     document.getElementById('loginOverlay').style.display = 'flex';
@@ -31,7 +32,7 @@ function goToShipSelect() {
     playerName = val || "Pilot";
     document.getElementById('loginOverlay').style.display = 'none';
     document.getElementById('shipMenu').style.display = 'flex';
-    logActivity("LOGIN SUCCESS");
+    logActivity("PILOT LOGGED IN");
 }
 
 function pickShip(src, id) {
@@ -60,7 +61,7 @@ function startGame(level) {
     requestAnimationFrame(gameLoop);
 }
 
-// --- SYSTEM UTILITIES ---
+// --- SYSTEM HANDLERS ---
 function togglePause() {
     if (!gameActive) return;
     isPaused = !isPaused;
@@ -74,9 +75,10 @@ window.addEventListener('keydown', e => {
 
 function gameOver() {
     gameActive = false;
+    shakeAmt = 15; // Small jolt on death
     document.getElementById('finalScoreDisplay').innerText = score;
     document.getElementById('gameOverScreen').style.display = 'flex';
-    logActivity(`GAME OVER - SCORE: ${score}`);
+    logActivity(`MISSION FAILED - SCORE: ${score}`);
 }
 
 function backToMenu() {
@@ -84,7 +86,23 @@ function backToMenu() {
     document.getElementById('shipMenu').style.display = 'flex';
 }
 
-// --- GAMEPLAY ENGINE ---
+// --- SHATTER & PARTICLES ---
+function createShatter(x, y, color, isBoss) {
+    const count = isBoss ? 50 : 12;
+    for (let i = 0; i < count; i++) {
+        particles.push({
+            x: x,
+            y: y,
+            vx: (Math.random() - 0.5) * 8,
+            vy: (Math.random() - 0.5) * 8,
+            size: Math.random() * 4 + 2,
+            life: 1.0,
+            color: color
+        });
+    }
+}
+
+// --- GAMEPLAY MECHANICS ---
 window.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
 window.addEventListener('mousedown', e => {
     if (!gameActive || isPaused) return;
@@ -115,51 +133,89 @@ function triggerPulse(isSuper) {
 
     if (now - last >= cd) {
         flashEffect = { timer: 25, color: isSuper ? '#ffff00' : '#00f2ff', size: range };
+        shakeAmt = isSuper ? 10 : 5; // MODERATE SHAKE
+
         enemies = enemies.filter(en => {
             const dist = Math.hypot(player.x - en.x, player.y - en.y);
             if (dist < range) {
                 if (en.isBoss && !isSuper) return true;
+                // TRIANGLE SHATTERS HERE
+                createShatter(en.x, en.y, en.isBoss ? '#bc13fe' : '#ff0044', en.isBoss);
                 return false;
             }
             return true;
         });
+
         if (isSuper) lastSuper = now; else lastPulse = now;
+        logActivity(isSuper ? "SUPERNOVA" : "PULSE");
     }
 }
 
 function update() {
     if (!gameActive || isPaused) return;
 
+    // Smooth movement
     player.x += (mouse.x - player.x) * 0.12;
     player.y += (mouse.y - player.y) * 0.12;
     player.angle = Math.atan2(mouse.y - player.y, mouse.x - player.x) + Math.PI/2;
 
+    // Score loop
     if (Date.now() - lastScoreTime > 1000) {
         score++;
         lastScoreTime = Date.now();
         document.getElementById('scr').innerText = score;
     }
 
+    // HUD Cooldowns
     const pWait = Math.max(0, Math.ceil((6000 - (Date.now() - lastPulse))/1000));
     const sWait = Math.max(0, Math.ceil((25000 - (Date.now() - lastSuper))/1000));
     document.getElementById('pCharge').innerText = pWait === 0 ? "READY" : pWait + "S";
     document.getElementById('sCharge').innerText = sWait === 0 ? "READY" : sWait + "S";
 
+    // Enemy Spawning
     if (Math.random() < 0.04 + (difficulty * 0.015)) spawnEnemy(false);
     if (Date.now() > nextBossTime) { spawnEnemy(true); nextBossTime = Date.now() + 45000; }
 
+    // Enemy Logic
     enemies.forEach((en, i) => {
         const d = Math.hypot(player.x - en.x, player.y - en.y);
         en.x += ((player.x - en.x) / d) * en.speed;
         en.y += ((player.y - en.y) / d) * en.speed;
+        en.rot += 0.02;
         if (d < (player.size * 0.7) + (en.size * 0.7)) gameOver();
     });
+
+    // Particle Logic
+    particles.forEach((p, i) => {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.life -= 0.02;
+        if (p.life <= 0) particles.splice(i, 1);
+    });
+
+    // Fade shake
+    if (shakeAmt > 0) shakeAmt *= 0.9;
 }
 
 function draw() {
     ctx.fillStyle = 'rgba(0, 5, 15, 0.4)';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+    ctx.save();
+    // APPLY GENTLE SHAKE
+    if (shakeAmt > 0.1) {
+        ctx.translate((Math.random() - 0.5) * shakeAmt, (Math.random() - 0.5) * shakeAmt);
+    }
+
+    // Draw Particles (Shatter fragments)
+    particles.forEach(p => {
+        ctx.globalAlpha = p.life;
+        ctx.fillStyle = p.color;
+        ctx.fillRect(p.x, p.y, p.size, p.size);
+    });
+    ctx.globalAlpha = 1;
+
+    // Draw Enemies (Triangles)
     enemies.forEach(en => {
         ctx.save();
         ctx.translate(en.x, en.y);
@@ -169,11 +225,16 @@ function draw() {
         ctx.fillStyle = en.isBoss ? '#bc13fe' : '#ff0044';
         if (en.isBoss) ctx.fillRect(-en.size/2, -en.size/2, en.size, en.size);
         else {
-            ctx.beginPath(); ctx.moveTo(0, -en.size/2); ctx.lineTo(en.size/2, en.size/2); ctx.lineTo(-en.size/2, en.size/2); ctx.fill();
+            ctx.beginPath(); 
+            ctx.moveTo(0, -en.size/2); 
+            ctx.lineTo(en.size/2, en.size/2); 
+            ctx.lineTo(-en.size/2, en.size/2); 
+            ctx.fill();
         }
         ctx.restore();
     });
 
+    // Draw Player
     ctx.save();
     ctx.translate(player.x, player.y);
     ctx.rotate(player.angle);
@@ -181,6 +242,7 @@ function draw() {
     ctx.drawImage(shipImg, -player.size, -player.size, player.size*2, player.size*2);
     ctx.restore();
 
+    // Pulse Circle
     if (flashEffect.timer > 0) {
         ctx.beginPath();
         ctx.arc(player.x, player.y, flashEffect.size * (1 - flashEffect.timer/25), 0, Math.PI*2);
@@ -189,6 +251,8 @@ function draw() {
         ctx.stroke();
         flashEffect.timer--;
     }
+
+    ctx.restore();
 }
 
 function gameLoop() {
