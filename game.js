@@ -263,9 +263,18 @@ function gameLoop() {
 
 async function logActivity(action) {
     try {
-        await fetch("https://literate-bassoon-pjvq4xxxv7v7hjrr-8001.app.github.dev/log", {
-            method: "POST", mode: "cors", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ "player": playerName, "action": action })
+        // Replace this URL with your actual Codespace URL
+        const url = "https://literate-bassoon-pjvq4xxxv7v7hjrr-8001.app.github.dev/log";
+        
+        await fetch(url, {
+            method: "POST",
+            mode: "cors",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ 
+                "player": playerName, 
+                "action": action,
+                "score": score // Sending the score for the dashboard
+            })
         });
-    } catch (e) { }
+    } catch (e) {}
 }
