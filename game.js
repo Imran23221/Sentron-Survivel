@@ -1,3 +1,4 @@
+// --- INITIAL SETUP ---
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 canvas.width = window.innerWidth;
@@ -11,17 +12,15 @@ let difficulty = 1;
 let selectedShipSrc = 'rocket.png';
 const shipImg = new Image();
 
-// Game Objects
 let player = { x: canvas.width/2, y: canvas.height/2, size: 38, angle: 0 };
 let enemies = [];
 let particles = [];
 let mouse = { x: canvas.width/2, y: canvas.height/2 };
 
-// Logic Timers
 let lastPulse = 0, lastSuper = 0, lastScoreTime = 0;
 let nextBossTime = 0, flashEffect = { timer: 0, color: '#fff', size: 0 };
 
-// --- MENU FLOW ---
+// --- MENU FLOW (Fixing the "ReferenceError") ---
 function showLogin() {
     document.getElementById('rulesOverlay').style.display = 'none';
     document.getElementById('loginOverlay').style.display = 'flex';
@@ -32,7 +31,7 @@ function goToShipSelect() {
     playerName = val || "Pilot";
     document.getElementById('loginOverlay').style.display = 'none';
     document.getElementById('shipMenu').style.display = 'flex';
-    logActivity("LOGGED IN");
+    logActivity("LOGIN SUCCESS");
 }
 
 function pickShip(src, id) {
@@ -61,13 +60,12 @@ function startGame(level) {
     requestAnimationFrame(gameLoop);
 }
 
-// PAUSE LOGIC
+// --- SYSTEM UTILITIES ---
 function togglePause() {
     if (!gameActive) return;
     isPaused = !isPaused;
     document.getElementById('pauseMenu').style.display = isPaused ? 'flex' : 'none';
     if (!isPaused) requestAnimationFrame(gameLoop);
-    logActivity(isPaused ? "PAUSED" : "RESUMED");
 }
 
 window.addEventListener('keydown', e => {
@@ -78,7 +76,7 @@ function gameOver() {
     gameActive = false;
     document.getElementById('finalScoreDisplay').innerText = score;
     document.getElementById('gameOverScreen').style.display = 'flex';
-    logActivity(`DIED at Score: ${score}`);
+    logActivity(`GAME OVER - SCORE: ${score}`);
 }
 
 function backToMenu() {
@@ -86,7 +84,7 @@ function backToMenu() {
     document.getElementById('shipMenu').style.display = 'flex';
 }
 
-// --- GAMEPLAY MECHANICS ---
+// --- GAMEPLAY ENGINE ---
 window.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
 window.addEventListener('mousedown', e => {
     if (!gameActive || isPaused) return;
@@ -147,7 +145,7 @@ function update() {
     document.getElementById('pCharge').innerText = pWait === 0 ? "READY" : pWait + "S";
     document.getElementById('sCharge').innerText = sWait === 0 ? "READY" : sWait + "S";
 
-    if (Math.random() < 0.04 + (difficulty * 0.01)) spawnEnemy(false);
+    if (Math.random() < 0.04 + (difficulty * 0.015)) spawnEnemy(false);
     if (Date.now() > nextBossTime) { spawnEnemy(true); nextBossTime = Date.now() + 45000; }
 
     enemies.forEach((en, i) => {
