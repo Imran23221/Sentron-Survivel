@@ -13,7 +13,6 @@ let player = { x: canvas.width/2, y: canvas.height/2, size: 35, angle: 0 };
 let mouse = { x: canvas.width/2, y: canvas.height/2 };
 let enemies = [];
 let gameActive = false, isPaused = false;
-let activityLog = [];
 let score = 0, difficulty = 1;
 let highScore = localStorage.getItem('sentronHigh') || 0;
 
@@ -22,28 +21,25 @@ let lastScoreUpdate = 0;
 let nextBoss = Date.now() + 180000; 
 let flashColor = null, flashTimer = 0, isSuperActive = false;
 
+// --- FIX 1: NEON LOGIN LOGIC ---
 function finalizeLogin() {
-    // 1. Grab the name from your new Red Neon input field
     const input = document.getElementById('playerInput').value;
-    
-    // 2. If they left it blank, call them 'Pilot', otherwise use their name
     playerName = input.trim() !== "" ? input : "Pilot";
     
-    // 3. Hide the Neon Login box (the red one)
+    // Hide login, show ship selection
     document.getElementById('loginOverlay').style.display = 'none';
-    
-    // 4. Show the ship selection menu so they can pick a rocket
     document.getElementById('startMenu').style.display = 'block';
     
-    // 5. Tell the terminal someone just logged in
+    sessionStarted = true;
     logActivity("JOINED THE BATTLE");
 }
 
 function selectShip(src, id) {
     selectedShipSrc = src;
     document.querySelectorAll('.ship-choice').forEach(img => img.classList.remove('selected'));
-    document.getElementById(id).classList.add('selected');
-    logActivity("Ship selected: " + id)
+    const element = document.getElementById(id);
+    if(element) element.classList.add('selected');
+    logActivity("Ship selected: " + id);
 }
 
 window.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
@@ -61,6 +57,7 @@ function initGame(level) {
     logActivity("System Initialized: " + modes[difficulty] + " MODE");
     rocketImg.src = selectedShipSrc;
     document.getElementById('startMenu').style.display = 'none';
+    document.getElementById('modeMenu').style.display = 'none'; // Ensure modes hide
     gameActive = true;
     score = 0;
     lastScoreUpdate = Date.now(); 
@@ -68,20 +65,26 @@ function initGame(level) {
     animate();
 }
 
+// --- FIX 2: GAME OVER FUNCTION ---
+function gameOver() {
+    gameActive = false;
+    logActivity("CRITICAL: PLAYER ELIMINATED - Score: " + score);
+    
+    // Hide game UI elements
+    document.getElementById('gameOver').style.display = 'none';
+    
+    // Return to ship selection (Start Menu)
+    document.getElementById('startMenu').style.display = 'block';
+}
+
 function togglePause() {
     isPaused = !isPaused;
     document.getElementById('pauseMenu').style.display = isPaused ? 'block' : 'none';
-    if (isPaused) {
-        logActivity("SYSTEM PAUSED: Tactical Break");
-    } else {
-        logActivity("SYSTEM RESUMED: Combat Continuing");
-    }
+    logActivity(isPaused ? "SYSTEM PAUSED" : "SYSTEM RESUMED");
 }
 
 function spawnEnemy(isBoss = false) {
-    if (isBoss) {
-        logActivity("BOSS DETECTED: SENTRON ELITE UNIT");
-    }
+    if (isBoss) logActivity("BOSS DETECTED: SENTRON ELITE UNIT");
     const size = isBoss ? 95 : 28;
     const speed = isBoss ? 0.7 : 1.3 + (difficulty * 0.8);
     let x, y;
@@ -96,22 +99,17 @@ function spawnEnemy(isBoss = false) {
 }
 
 function triggerPulse(isSuper) {
-    if (isSuper) {
-    logActivity("Super Pulse Activated!");
-} else {
-    logActivity("Pulse Activated!");
-}
     const now = Date.now();
     const cooldown = isSuper ? 30000 : 7000;
     const lastTime = isSuper ? lastSuper : lastPulse;
     const range = isSuper ? 550 : 280;
 
     if (now - lastTime >= cooldown) {
+        logActivity(isSuper ? "Super Pulse Activated!" : "Pulse Activated!");
         enemies = enemies.filter(en => {
             const dist = Math.hypot(player.x - en.x, player.y - en.y);
             if (dist < range) {
                 if (en.isBoss && !isSuper) return true; 
-                // Removed score addition here so pulse doesn't give points
                 return false;
             }
             return true;
@@ -124,36 +122,17 @@ function triggerPulse(isSuper) {
     }
 }
 
-// This function runs when the user clicks "Continue" on the Rules box
-function closeRules() {
-    let nameInput = prompt("ENTER PILOT IDENTIFICATION:", "Pilot");
-    playerName = nameInput ? nameInput : "Guest";
-    
-    // 1. Hide the rules
-    document.getElementById('rulesOverlay').style.display = 'none';
-    
-    // 2. SHOW the Start Menu (This prevents the freeze!)
-    // Make sure 'startMenu' matches the ID in your HTML
-    document.getElementById('startMenu').style.display = 'block';
-    
-    logActivity("JOINED THE BATTLE"); 
-}
-
-
 function update() {
     if (!gameActive || isPaused) return;
 
     let now = Date.now();
-
-    // STRICT SURVIVAL SCORE: Exactly 1 point per 1 second
-    if (now - lastScoreUpdate >= 500
-    ) {
+    if (now - lastScoreUpdate >= 1000) {
         score += 1;
         lastScoreUpdate = now;
     }
     
-    player.x += (mouse.x - player.x) * 0.12 + (Math.random() - 0.5) * 5;
-    player.y += (mouse.y - player.y) * 0.12 + (Math.random() - 0.5) * 5;
+    player.x += (mouse.x - player.x) * 0.12;
+    player.y += (mouse.y - player.y) * 0.12;
     player.angle = Math.atan2(mouse.y - player.y, mouse.x - player.x) + Math.PI/2;
 
     document.getElementById('pCharge').innerText = (now - lastPulse >= 7000) ? "READY" : Math.ceil((7000 - (now - lastPulse))/1000) + "s";
@@ -166,10 +145,11 @@ function update() {
         const dist = Math.hypot(player.x - en.x, player.y - en.y);
         en.x += ((player.x - en.x) / dist) * en.speed;
         en.y += ((player.y - en.y) / dist) * en.speed;
+        
+        // --- TRIGGER NEW GAME OVER ---
         if (dist < player.size * 0.8 + en.size) {
-    gameActive = false;
-    logActivity("CRITICAL: PLAYER ELIMINATED - Score: " + score); // Add this!
-    }
+            gameOver();
+        }
     });
 
     document.getElementById('scr').innerText = score;
@@ -177,11 +157,6 @@ function update() {
         highScore = score;
         localStorage.setItem('sentronHigh', highScore);
         document.getElementById('hscr').innerText = highScore;
-    }
-    
-    if (!gameActive) {
-    document.getElementById('startMenu').style.display = 'block'; // Shows Ship Pick
-    document.getElementById('gameOver').style.display = 'none'; // Hides "Game Over" text
     }
 }
 
@@ -196,15 +171,9 @@ function draw() {
         ctx.shadowBlur = 15;
         ctx.shadowColor = flashColor;
         ctx.strokeStyle = flashColor;
-        for (let i = 1; i <= 5; i++) {
-            let ringP = progress * (1 + i * 0.2); 
-            if (ringP > 1) ringP = 1;
-            ctx.beginPath();
-            ctx.arc(player.x, player.y, maxRange * ringP, 0, Math.PI * 2);
-            ctx.lineWidth = 6 * (1 - ringP);
-            ctx.globalAlpha = 1 - ringP;
-            ctx.stroke();
-        }
+        ctx.beginPath();
+        ctx.arc(player.x, player.y, maxRange * progress, 0, Math.PI * 2);
+        ctx.stroke();
         ctx.restore();
         flashTimer--;
     }
@@ -212,11 +181,8 @@ function draw() {
     enemies.forEach(en => {
         ctx.beginPath();
         ctx.arc(en.x, en.y, en.size, 0, Math.PI*2);
-        ctx.shadowBlur = 25;
-        ctx.shadowColor = en.isBoss ? "#bc13fe" : "#ff0000"; // Purple Boss vs Red Neon
         ctx.fillStyle = en.isBoss ? "#bc13fe" : "#ff0000";
         ctx.fill();
-        ctx.shadowBlur = 0;
     });
 
     ctx.save();
@@ -227,31 +193,27 @@ function draw() {
 }
 
 function animate() {
-    update();
-    draw();
-    if (gameActive) requestAnimationFrame(animate);
+    if (gameActive) {
+        update();
+        draw();
+        requestAnimationFrame(animate);
+    }
 }
-// This function sends the data to your Python Logger
+
 async function logActivity(action) {
     try {
         await fetch("https://literate-bassoon-pjvq4xxxv7v7hjrr-8001.app.github.dev/log", {
             method: "POST",
             mode: "cors",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ 
-                "player": playerName, 
-                "action": action 
-            })
+            body: JSON.stringify({ "player": playerName, "action": action })
         });
     } catch (e) {
-        console.log("Logger is offline or Port 8001 is Private.");
+        console.log("Logger offline.");
     }
 }
+
 function quitGame() {
     logActivity("SESSION TERMINATED: User Quit");
-    
-    // This part actually "quits" by reloading the game
-    setTimeout(() => {
-        location.reload();
-    }, 500); // 500ms delay so the log has time to send!
+    setTimeout(() => { location.reload(); }, 500);
 }
