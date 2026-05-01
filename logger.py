@@ -6,71 +6,61 @@ from datetime import datetime
 PORT = 8001
 HOST = '0.0.0.0'
 
-# Color Codes for that "Firewall" look
-RED = "\033[1;31m"
-CYAN = "\033[1;36m"
-GOLD = "\033[1;33m"
-GREEN = "\033[1;32m"
-RESET = "\033[0m"
+# Color Palette
+RED, CYAN, GOLD, GREEN, WHITE, VIOLET, RESET = "\033[1;31m", "\033[1;36m", "\033[1;33m", "\033[1;32m", "\033[1;37m", "\033[1;35m", "\033[0m"
 
-def draw_dashboard(pilot, action, score="0"):
-    # Clear terminal for that "Live Dashboard" feel
+log_history = []
+MAX_LOGS = 15 
+
+def draw_dashboard():
     os.system('cls' if os.name == 'nt' else 'clear')
+    print(f"{RED}="*65)
+    print(f"{RED}>> [ SENTRON FIREWALL: DEEP SCAN ACTIVE ] <<{RESET}".center(75))
+    print(f"{RED}="*65 + f"{RESET}")
     
-    time_str = datetime.now().strftime("%H:%M:%S")
-    
-    print(f"{RED}="*60)
-    print(f"{RED}>> [ SENTRON FIREWALL DASHBOARD ] <<{RESET}".center(70))
-    print(f"{RED}="*60 + f"{RESET}")
-    
-    print(f"{CYAN} STATUS: ACTIVE          SYSTEM TIME: {time_str}{RESET}")
-    print(f"{CYAN} PILOT : {pilot.upper()}{RESET}")
-    print("-" * 60)
-    
-    # Event coloring
-    color = RESET
-    if "SUPERNOVA" in action: color = GOLD
-    elif "ELIMINATED" in action: color = RED
-    elif "PULSE" in action: color = GREEN
-    
-    print(f"\n   LAST SECTOR EVENT:")
-    print(f"   {color}>>> {action} <<<{RESET}\n")
-    
-    print("-" * 60)
-    print(f"{GOLD} SESSION HIGH SCORE: {score}{RESET}")
-    print(f"{RED}="*60 + f"{RESET}")
+    if not log_history:
+        print(f"\n{WHITE}   [ SEARCHING ] NO PILOT SIGNATURE DETECTED...{RESET}\n")
+    else:
+        for entry in log_history:
+            time, pilot, action, score = entry['time'], entry['pilot'].upper(), entry['action'], entry['score']
+            
+            # Smart Color Logic
+            color = WHITE
+            if "SHIP" in action: color = VIOLET
+            elif "MODE" in action: color = CYAN
+            elif "PAUSE" in action or "RESUME" in action: color = GOLD
+            elif "ELIMINATED" in action: color = RED
+            elif "PULSE" in action: color = GREEN
+            
+            print(f" {CYAN}[{time}]{RESET} {WHITE}{pilot}{RESET} -> {color}{action}{RESET} | {GOLD}SCR: {score}{RESET}")
 
-# Start Server
+    print("-" * 65)
+    print(f"{RED}="*65 + f"{RESET}")
+
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 server.bind((HOST, PORT))
 server.listen(5)
-
-draw_dashboard("Waiting...", "INITIALIZING RADAR")
+draw_dashboard()
 
 while True:
     try:
         conn, addr = server.accept()
         raw_request = conn.recv(2048).decode('utf-8', errors='ignore')
-        
-        if "OPTIONS" in raw_request:
-            response = "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: POST, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type\r\n\r\n"
-            conn.sendall(response.encode())
-        
-        elif "POST" in raw_request:
-            if "\r\n\r\n" in raw_request:
-                body = raw_request.split("\r\n\r\n")[1]
-                data = json.loads(body)
-                
-                # Fetching the extra info you wanted
-                pilot = data.get("player", "UNKNOWN")
-                action = data.get("action", "IDLE")
-                current_score = data.get("score", "0")
-                
-                draw_dashboard(pilot, action, current_score)
-                
-                resp = "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: *\r\nContent-Type: application/json\r\n\r\n" + '{"status":"ok"}'
-                conn.sendall(resp.encode())
+        if "POST" in raw_request and "\r\n\r\n" in raw_request:
+            body = raw_request.split("\r\n\r\n")[1]
+            data = json.loads(body)
+            new_entry = {
+                "time": datetime.now().strftime("%H:%M:%S"),
+                "pilot": data.get("player", "UNKNOWN"),
+                "action": data.get("action", "IDLE"),
+                "score": data.get("score", "0")
+            }
+            log_history.append(new_entry)
+            if len(log_history) > MAX_LOGS: log_history.pop(0)
+            draw_dashboard()
+            conn.sendall(b"HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: *\r\n\r\n")
+        elif "OPTIONS" in raw_request:
+            conn.sendall(b"HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: POST, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type\r\n\r\n")
         conn.close()
-    except:
-        pass
+    except: pass
