@@ -262,21 +262,20 @@ function gameLoop() {
 }
 
 async function logActivity(action) {
-    try {
-        // Replace this URL with your actual Codespace URL
-        const url = "https://literate-bassoon-pjvq4xxxv7v7hjrr-8001.app.github.dev/log";
-        
-        await fetch(url, {
-            method: "POST",
-            mode: "cors",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ 
-                "player": playerName, 
-                "action": action,
-                "score": score // Sending the score for the dashboard
-            })
-        });
-    } catch (e) {}
+    const url = "https://literate-bassoon-pjvq4xxxv7v7hjrr-8001.app.github.dev/log";
+    
+    // We remove 'await' and use 'navigator.sendBeacon' or a simplified fetch
+    // to bypass the strict CORS check that is crashing your console.
+    fetch(url, {
+        method: "POST",
+        mode: "no-cors", // This tells the browser: "Don't worry about the security check"
+        headers: { "Content-Type": "text/plain" }, // Plain text bypasses most filters
+        body: JSON.stringify({ 
+            "player": playerName, 
+            "action": action, 
+            "score": score 
+        })
+    }).catch(e => {}); // Silently catch errors so the game keeps running
 }
 
 //Final Update
