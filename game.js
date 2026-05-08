@@ -264,17 +264,17 @@ function gameLoop() {
 async function logActivity(action) {
     const url = "https://literate-bassoon-pjvq4xxxv7v7hjrr-8001.app.github.dev/log";
     
-    // Line 267 fix: We use a simplified fetch to avoid the Gateway error
+    // Simplified fetch to stop the Bad Gateway/CORS errors
     fetch(url, {
         method: "POST",
         mode: "no-cors", 
         headers: { "Content-Type": "text/plain" },
         body: JSON.stringify({ 
-            player: playerName || "Pilot", 
+            player: typeof playerName !== 'undefined' ? playerName : "Pilot", 
             action: action, 
             score: typeof score !== 'undefined' ? score : 0 
         })
-    }).catch(err => {}); // Prevents the red console errors from stopping the game
+    }).catch(err => {}); 
 }
 
 //Final Update
