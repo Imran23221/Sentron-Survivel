@@ -262,9 +262,9 @@ function gameLoop() {
 }
 
 async function logActivity(action) {
+    // Ensure this URL is exactly what's in your Ports tab
     const url = "https://literate-bassoon-pjvq4xxxv7v7hjrr-8001.app.github.dev/log";
     
-    // Simplified fetch to stop the Bad Gateway/CORS errors
     fetch(url, {
         method: "POST",
         mode: "no-cors", 
@@ -274,7 +274,7 @@ async function logActivity(action) {
             action: action, 
             score: typeof score !== 'undefined' ? score : 0 
         })
-    }).catch(err => {}); 
+    }).catch(err => console.log("Dashboard Link Offline")); 
 }
 
 //Final Update
