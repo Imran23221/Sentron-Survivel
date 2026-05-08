@@ -263,19 +263,13 @@ function gameLoop() {
 
 async function logActivity(action) {
     const url = "https://literate-bassoon-pjvq4xxxv7v7hjrr-8001.app.github.dev/log";
-    
-    // We remove 'await' and use 'navigator.sendBeacon' or a simplified fetch
-    // to bypass the strict CORS check that is crashing your console.
-    fetch(url, {
-        method: "POST",
-        mode: "no-cors", // This tells the browser: "Don't worry about the security check"
-        headers: { "Content-Type": "text/plain" }, // Plain text bypasses most filters
-        body: JSON.stringify({ 
-            "player": playerName, 
-            "action": action, 
-            "score": score 
-        })
-    }).catch(e => {}); // Silently catch errors so the game keeps running
+
+        fetch(url, {
+            method: "POST",
+            mode: "no-cors", 
+            headers: { "Content-Type": "text/plain" },
+            body: JSON.stringify({ player: playerName, action: action, score: score })
+        }).catch(err => console.log("Dashboard Offline"));
 }
 
 //Final Update
