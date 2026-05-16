@@ -262,21 +262,18 @@ function gameLoop() {
 }
 
 async function logActivity(action) {
-    try {
-        // Replace this URL with your actual Codespace URL
-        const url = "https://literate-bassoon-pjvq4xxxv7v7hjrr-8001.app.github.dev/log";
-        
-        await fetch(url, {
-            method: "POST",
-            mode: "cors",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ 
-                "player": playerName, 
-                "action": action,
-                "score": score // Sending the score for the dashboard
-            })
-        });
-    } catch (e) {}
+    const url = "https://literate-bassoon-pjvq4xxxv7v7hjrr-8001.app.github.dev/log";
+    
+    fetch(url, {
+        method: "POST",
+        mode: "cors", // Switched to cors to match the master key headers on Python
+        headers: { "Content-Type": "text/plain" },
+        body: JSON.stringify({ 
+            player: typeof playerName !== 'undefined' ? playerName : "Pilot", 
+            action: action, 
+            score: typeof score !== 'undefined' ? score : 0 
+        })
+    }).catch(err => console.log("Dashboard Link Offline")); 
 }
 
 

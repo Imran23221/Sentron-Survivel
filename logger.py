@@ -13,7 +13,6 @@ log_history = []
 MAX_LOGS = 18 
 
 def draw_dashboard():
-    # Clear terminal to redraw updated list
     os.system('cls' if os.name == 'nt' else 'clear')
     print(f"{R}="*70)
     print(f"{R}>> [ SENTRON FIREWALL: SECTOR SURVEILLANCE ] <<{X}".center(80))
@@ -25,7 +24,6 @@ def draw_dashboard():
         for entry in log_history:
             time, pilot, action, score = entry['time'], entry['pilot'].upper(), entry['action'], entry['score']
             
-            # Event-Specific Color Logic
             color = W
             if "SHIP" in action: color = V
             elif "MODE" in action: color = C
@@ -69,17 +67,27 @@ while True:
                 except:
                     pass
             
-            # Send the response (Success) back to browser
-            response = "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: *\r\nContent-Type: text/plain\r\n\r\nOK"
+            # Send the relaxed response headers back to browser
+            response = (
+                "HTTP/1.1 200 OK\r\n"
+                "Access-Control-Allow-Origin: *\r\n"
+                "Access-Control-Allow-Headers: *\r\n"
+                "Content-Type: text/plain\r\n\r\n"
+                "OK"
+            )
             conn.sendall(response.encode())
             
-        # Handle the CORS pre-check
+        # FIXES THE ERROR IN YOUR NEW SCREENSHOT: Complete Preflight approval
         elif "OPTIONS" in raw_request:
-            response = "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: POST, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type\r\n\r\n"
+            response = (
+                "HTTP/1.1 200 OK\r\n"
+                "Access-Control-Allow-Origin: *\r\n"
+                "Access-Control-Allow-Methods: POST, GET, OPTIONS\r\n"
+                "Access-Control-Allow-Headers: *\r\n"
+                "Connection: keep-alive\r\n\r\n"
+            )
             conn.sendall(response.encode())
             
         conn.close()
     except Exception as e:
         pass
-
-#Finall Update
