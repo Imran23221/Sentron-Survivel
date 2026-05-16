@@ -261,7 +261,7 @@ function gameLoop() {
     if (gameActive && !isPaused) requestAnimationFrame(gameLoop);
 }
 
-    // Line 267 fix: We use a simplified fetch to avoid the Gateway error
+// Line 267 fix: We use a simplified fetch to avoid the Gateway error
 fetch(url, {
     method: "POST",
     mode: "no-cors", 
