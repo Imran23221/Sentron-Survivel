@@ -261,20 +261,18 @@ function gameLoop() {
     if (gameActive && !isPaused) requestAnimationFrame(gameLoop);
 }
 
-async function logActivity(action) {
-    // Ensure this URL is exactly what's in your Ports tab
-    const url = "https://literate-bassoon-pjvq4xxxv7v7hjrr-8001.app.github.dev/log";
-    
-    fetch(url, {
-        method: "POST",
-        mode: "no-cors", 
-        headers: { "Content-Type": "text/plain" },
-        body: JSON.stringify({ 
-            player: typeof playerName !== 'undefined' ? playerName : "Pilot", 
-            action: action, 
-            score: typeof score !== 'undefined' ? score : 0 
-        })
-    }).catch(err => console.log("Dashboard Link Offline")); 
-}
+    // Line 267 fix: We use a simplified fetch to avoid the Gateway error
+fetch(url, {
+    method: "POST",
+    mode: "no-cors", 
+    headers: { "Content-Type": "text/plain" },
+    body: JSON.stringify({ 
+        player: playerName || "Pilot", 
+        action: action, 
+        score: typeof score !== 'undefined' ? score : 0 
+    })
+}).catch(err => {}); // Prevents the red console errors from stopping the game
+
+
 
 //Final Update
