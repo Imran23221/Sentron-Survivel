@@ -66,6 +66,7 @@ function togglePause() {
     if (!gameActive) return;
     isPaused = !isPaused;
     document.getElementById('pauseMenu').style.display = isPaused ? 'flex' : 'none';
+    logActivity(isPaused ? "GAME PAUSED" : "GAME RESUMED");
     if (!isPaused) requestAnimationFrame(gameLoop);
 }
 
