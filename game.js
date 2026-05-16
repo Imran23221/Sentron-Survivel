@@ -262,20 +262,22 @@ function gameLoop() {
 }
 
 async function logActivity(action) {
-    const url = "https://literate-bassoon-pjvq4xxxv7v7hjrr-8001.app.github.dev/log";
-
-// Line 267 fix: We use a simplified fetch to avoid the Gateway error
-fetch(url, {
-    method: "POST",
-    mode: "no-cors", 
-    headers: { "Content-Type": "text/plain" },
-    body: JSON.stringify({ 
-        player: playerName || "Pilot", 
-        action: action, 
-        score: typeof score !== 'undefined' ? score : 0 
-    })
-}).catch(err => {}); // Prevents the red console errors from stopping the game
-
+    try {
+        // Replace this URL with your actual Codespace URL
+        const url = "https://literate-bassoon-pjvq4xxxv7v7hjrr-8001.app.github.dev/log";
+        
+        await fetch(url, {
+            method: "POST",
+            mode: "cors",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ 
+                "player": playerName, 
+                "action": action,
+                "score": score // Sending the score for the dashboard
+            })
+        });
+    } catch (e) {}
+}
 
 
 //Final Update
