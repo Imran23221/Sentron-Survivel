@@ -264,17 +264,21 @@ function gameLoop() {
 async function logActivity(action) {
     const url = "https://literate-bassoon-pjvq4xxxv7v7hjrr-8001.app.github.dev/log";
     
+    // Format the data exactly how the original Centron backend reads it
+    const pName = typeof playerName !== 'undefined' && playerName ? playerName : "Pilot";
+    const currentScore = typeof score !== 'undefined' ? score : 0;
+    
+    // This creates a standard form-encoded body string
+    const formBody = `player=${encodeURIComponent(pName)}&action=${encodeURIComponent(action)}&score=${encodeURIComponent(currentScore)}`;
+    
     fetch(url, {
         method: "POST",
-        mode: "cors", // Switched to cors to match the master key headers on Python
-        headers: { "Content-Type": "text/plain" },
-        body: JSON.stringify({ 
-            player: typeof playerName !== 'undefined' ? playerName : "Pilot", 
-            action: action, 
-            score: typeof score !== 'undefined' ? score : 0 
-        })
-    }).catch(err => console.log("Dashboard Link Offline")); 
+        mode: "cors",
+        headers: { 
+            "Content-Type": "application/x-www-form-urlencoded" 
+        },
+        body: formBody
+    }).catch(err => {}); 
 }
-
 
 //Final Update
