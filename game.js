@@ -261,6 +261,9 @@ function gameLoop() {
     if (gameActive && !isPaused) requestAnimationFrame(gameLoop);
 }
 
+async function logActivity(action) {
+    const url = "https://literate-bassoon-pjvq4xxxv7v7hjrr-8001.app.github.dev/log";
+
 // Line 267 fix: We use a simplified fetch to avoid the Gateway error
 fetch(url, {
     method: "POST",
