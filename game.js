@@ -42,6 +42,11 @@ function setPlayerName(inputName) {
 function showLogin() {
     document.getElementById('rulesOverlay').style.display = 'none';
     document.getElementById('loginOverlay').style.display = 'flex';
+    
+    // --- FIXES THE 12 CHARACTER LIMIT ---
+    const inputField = document.getElementById('playerInput');
+    if (inputField) inputField.setAttribute('maxlength', '30');
+    // ------------------------------------
 }
 
 function goToShipSelect() {
@@ -223,7 +228,6 @@ function update() {
             let enemyEliminated = false;
             for (let j = 0; j < shipTrail.length; j++) {
                 let point = shipTrail[j];
-                // Check if any trail coordinate falls inside the enemy's boundaries
                 if (point.x > en.x - en.size/2 && point.x < en.x + en.size/2 &&
                     point.y > en.y - en.size/2 && point.y < en.y + en.size/2) {
                     enemyEliminated = true;
