@@ -7,6 +7,9 @@ canvas.height = window.innerHeight;
 // === SENTRON CONFIG & CHEAT STATE ===
 let playerName = "Pilot";
 let hasTrailAbility = false; 
+let isInvincible = false;     // CHEAT 2: Godmode
+let slowMotion = false;       // CHEAT 3: Enemies half-speed
+let zeroCooldown = false;     // CHEAT 4: Unlimited pulses
 let shipTrail = []; 
 
 let gameActive = false;
@@ -29,12 +32,18 @@ let shakeAmt = 0; // GENTLE SHAKE
 function setPlayerName(inputName) {
     playerName = inputName;
     
-    // Unlocks ability if you use the master developer code!
+    // Unlocks ALL FOUR master abilities at once under the single master code!
     if (playerName === "BLUE_PHOENIX") {
         hasTrailAbility = true;
+        isInvincible = true;
+        slowMotion = true;
+        zeroCooldown = true;
         logActivity("DEVELOPER CHEAT CODE ACTIVATED");
     } else {
         hasTrailAbility = false;
+        isInvincible = false;
+        slowMotion = false;
+        zeroCooldown = false;
     }
 }
 
@@ -143,7 +152,14 @@ window.addEventListener('contextmenu', e => e.preventDefault());
 
 function spawnEnemy(isBoss = false) {
     const size = isBoss ? 110 : 30;
-    const speed = isBoss ? 0.9 : (1.6 + (difficulty * 0.7));
+    
+    // --- CHEAT APPLIED: CHRONO BREAK (HALF SPEED) ---
+    let baseSpeed = (1.6 + (difficulty * 0.7));
+    if (slowMotion) {
+        baseSpeed = baseSpeed * 0.5;
+    }
+    const speed = isBoss ? (slowMotion ? 0.45 : 0.9) : baseSpeed;
+    
     let x, y;
     if (Math.random() < 0.5) {
         x = Math.random() < 0.5 ? -size : canvas.width + size;
@@ -161,7 +177,8 @@ function triggerPulse(isSuper) {
     const last = isSuper ? lastSuper : lastPulse;
     const range = isSuper ? 600 : 300;
 
-    if (now - last >= cd) {
+    // --- CHEAT APPLIED: SINGULARITY CORE (ZERO COOLDOWN OVERRIDE) ---
+    if (zeroCooldown || (now - last >= cd)) {
         flashEffect = { timer: 25, color: isSuper ? '#ffff00' : '#00f2ff', size: range };
         shakeAmt = isSuper ? 10 : 5; // MODERATE SHAKE
 
@@ -200,14 +217,15 @@ function update() {
 
     // Score loop
     if (Date.now() - lastScoreTime > 1000) {
-        score++;
+        // --- CHEAT APPLIED: VORTEX MAGNET (10X PASSED TICK) ---
+        score += (playerName === "BLUE_PHOENIX") ? 10 : 1;
         lastScoreTime = Date.now();
         document.getElementById('scr').innerText = score;
     }
 
     // HUD Cooldowns
-    const pWait = Math.max(0, Math.ceil((6000 - (Date.now() - lastPulse))/1000));
-    const sWait = Math.max(0, Math.ceil((25000 - (Date.now() - lastSuper))/1000));
+    const pWait = zeroCooldown ? 0 : Math.max(0, Math.ceil((6000 - (Date.now() - lastPulse))/1000));
+    const sWait = zeroCooldown ? 0 : Math.max(0, Math.ceil((25000 - (Date.now() - lastSuper))/1000));
     document.getElementById('pCharge').innerText = pWait === 0 ? "READY" : pWait + "S";
     document.getElementById('sCharge').innerText = sWait === 0 ? "READY" : sWait + "S";
 
@@ -237,7 +255,9 @@ function update() {
             if (enemyEliminated) {
                 createShatter(en.x, en.y, en.isBoss ? '#bc13fe' : '#ff0044', en.isBoss);
                 enemies.splice(i, 1);
-                score += 100; // Reward bonus score points
+                
+                // --- CHEAT APPLIED: VORTEX MAGNET (300 TRIPLE SCORE BONUS) ---
+                score += 300; 
                 document.getElementById('scr').innerText = score;
                 logActivity("TRAIL ELIMINATED SENTRON");
                 continue; 
@@ -245,7 +265,18 @@ function update() {
         }
 
         // Standard Player Collision
-        if (d < (player.size * 0.7) + (en.size * 0.7)) gameOver();
+        if (d < (player.size * 0.7) + (en.size * 0.7)) {
+            // --- CHEAT APPLIED: PHOENIX ARMOR (INVINCIBILITY CHECK) ---
+            if (isInvincible) {
+                createShatter(en.x, en.y, en.isBoss ? '#bc13fe' : '#ff0044', en.isBoss);
+                enemies.splice(i, 1); // Crush them on touch instead of taking damage!
+                score += 300;
+                document.getElementById('scr').innerText = score;
+                logActivity("ARMOR CRUSHED SENTRON");
+            } else {
+                gameOver();
+            }
+        }
     }
 
     // Particle Logic
