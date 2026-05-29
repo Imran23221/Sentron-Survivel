@@ -32,18 +32,39 @@ let shakeAmt = 0; // GENTLE SHAKE
 function setPlayerName(inputName) {
     playerName = inputName;
     
-    // Unlocks ALL FOUR master abilities at once under the single master code!
+    // Reset all matrix states back to default before validating
+    hasTrailAbility = false;
+    isInvincible = false;
+    slowMotion = false;
+    zeroCooldown = false;
+
+    // OPTION 1: Ultimate Dev Override (All systems active!)
     if (playerName === "BLUE_PHOENIX") {
         hasTrailAbility = true;
         isInvincible = true;
         slowMotion = true;
         zeroCooldown = true;
         logActivity("DEVELOPER CHEAT CODE ACTIVATED");
-    } else {
-        hasTrailAbility = false;
-        isInvincible = false;
-        slowMotion = false;
-        zeroCooldown = false;
+    } 
+    // OPTION 2: Individual Armor Matrix
+    else if (playerName === "PHOENIX_ARMOR") {
+        isInvincible = true;
+        logActivity("DEVELOPER MATRIX: INVINCIBILITY");
+    } 
+    // OPTION 3: Individual Time Manipulation Matrix
+    else if (playerName === "CHRONO_BREAK") {
+        slowMotion = true;
+        logActivity("DEVELOPER MATRIX: CHRONO SLOW");
+    } 
+    // OPTION 4: Individual Singularity Recharge Matrix
+    else if (playerName === "SINGULARITY_CORE") {
+        zeroCooldown = true;
+        logActivity("DEVELOPER MATRIX: ZERO CD");
+    } 
+    // OPTION 5: Individual Trail Matrix
+    else if (playerName === "VORTEX_MAGNET") {
+        hasTrailAbility = true;
+        logActivity("DEVELOPER MATRIX: ENERGY TRAIL");
     }
 }
 
@@ -217,8 +238,8 @@ function update() {
 
     // Score loop
     if (Date.now() - lastScoreTime > 1000) {
-        // --- CHEAT APPLIED: VORTEX MAGNET (10X PASSED TICK) ---
-        score += (playerName === "BLUE_PHOENIX") ? 10 : 1;
+        // --- CHEAT APPLIED: VORTEX PASSED TICK MODIFIER ---
+        score += (playerName === "BLUE_PHOENIX" || playerName === "VORTEX_MAGNET") ? 10 : 1;
         lastScoreTime = Date.now();
         document.getElementById('scr').innerText = score;
     }
@@ -256,7 +277,7 @@ function update() {
                 createShatter(en.x, en.y, en.isBoss ? '#bc13fe' : '#ff0044', en.isBoss);
                 enemies.splice(i, 1);
                 
-                // --- CHEAT APPLIED: VORTEX MAGNET (300 TRIPLE SCORE BONUS) ---
+                // --- CHEAT APPLIED: BONUS ELIMINATION MODIFIER ---
                 score += 300; 
                 document.getElementById('scr').innerText = score;
                 logActivity("TRAIL ELIMINATED SENTRON");
