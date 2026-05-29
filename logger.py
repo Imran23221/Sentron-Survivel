@@ -36,11 +36,11 @@ def render_firewall_dash():
             score = entry.get('score', '0')
             
             color = WHITE
-            if "SHIP" in action: color = VIOLET
+            if "SHIP" in action or "CRAFT" in action: color = VIOLET
             elif "MODE" in action: color = CYAN
             elif "PAUSE" in action or "RESUME" in action: color = GOLD
             elif "ELIMINATED" in action or "QUIT" in action: color = RED
-            elif "PULSE" in action: color = GREEN
+            elif "PULSE" in action or "CHEAT" in action: color = GREEN
             
             print(f" {CYAN}[{timestamp}]{RESET} {WHITE}{pilot}{RESET} -> {color}{action}{RESET} | {GOLD}SCORE: {score}{RESET}")
 
@@ -63,10 +63,8 @@ while True:
             _, _, body = raw_request.partition("\r\n\r\n")
             if body:
                 try:
-                    # Original form-field parser mechanism
                     parsed_data = parse_qs(body.strip())
                     
-                    # Extract values out of the parsed arrays
                     pilot_name = parsed_data.get("player", ["Pilot"])[0]
                     action_msg = parsed_data.get("action", ["SYSTEM_CHECK"])[0]
                     live_score = parsed_data.get("score", ["0"])[0]

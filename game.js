@@ -4,7 +4,11 @@ const ctx = canvas.getContext('2d');
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
+// === SENTRON CONFIG & CHEAT STATE ===
 let playerName = "Pilot";
+let hasTrailAbility = false; 
+let shipTrail = []; 
+
 let gameActive = false;
 let isPaused = false;
 let score = 0;
@@ -21,6 +25,19 @@ let lastPulse = 0, lastSuper = 0, lastScoreTime = 0;
 let nextBossTime = 0, flashEffect = { timer: 0, color: '#fff', size: 0 };
 let shakeAmt = 0; // GENTLE SHAKE
 
+// --- DEVELOPER REGISTRATION FUNCTION ---
+function setPlayerName(inputName) {
+    playerName = inputName;
+    
+    // Unlocks ability if you use the master developer code!
+    if (playerName === "BLUE_PHOENIX_REBIRTH") {
+        hasTrailAbility = true;
+        logActivity("DEVELOPER CHEAT CODE ACTIVATED");
+    } else {
+        hasTrailAbility = false;
+    }
+}
+
 // --- MENU NAVIGATION ---
 function showLogin() {
     document.getElementById('rulesOverlay').style.display = 'none';
@@ -29,7 +46,10 @@ function showLogin() {
 
 function goToShipSelect() {
     const val = document.getElementById('playerInput').value.trim();
-    playerName = val || "Pilot";
+    
+    // Process name through developer cheat checkpoint
+    setPlayerName(val || "Pilot");
+    
     document.getElementById('loginOverlay').style.display = 'none';
     document.getElementById('shipMenu').style.display = 'flex';
     logActivity("PILOT LOGGED IN");
@@ -50,6 +70,7 @@ function startGame(level) {
     score = 0;
     enemies = [];
     particles = [];
+    shipTrail = []; // Reset old trails
     gameActive = true;
     isPaused = false;
     lastPulse = Date.now();
@@ -66,7 +87,10 @@ function togglePause() {
     if (!gameActive) return;
     isPaused = !isPaused;
     document.getElementById('pauseMenu').style.display = isPaused ? 'flex' : 'none';
+    
+    // Logs the exact pause/resume interaction state to dashboard
     logActivity(isPaused ? "GAME PAUSED" : "GAME RESUMED");
+    
     if (!isPaused) requestAnimationFrame(gameLoop);
 }
 
@@ -140,7 +164,6 @@ function triggerPulse(isSuper) {
             const dist = Math.hypot(player.x - en.x, player.y - en.y);
             if (dist < range) {
                 if (en.isBoss && !isSuper) return true;
-                // TRIANGLE SHATTERS HERE
                 createShatter(en.x, en.y, en.isBoss ? '#bc13fe' : '#ff0044', en.isBoss);
                 return false;
             }
@@ -160,6 +183,16 @@ function update() {
     player.y += (mouse.y - player.y) * 0.12;
     player.angle = Math.atan2(mouse.y - player.y, mouse.x - player.x) + Math.PI/2;
 
+    // --- BLUE PHOENIX TRAIL TRACKING ---
+    if (hasTrailAbility) {
+        shipTrail.push({ x: player.x, y: player.y });
+        if (shipTrail.length > 40) {
+            shipTrail.shift(); // Keep trail length locked
+        }
+    } else {
+        shipTrail = [];
+    }
+
     // Score loop
     if (Date.now() - lastScoreTime > 1000) {
         score++;
@@ -178,13 +211,38 @@ function update() {
     if (Date.now() > nextBossTime) { spawnEnemy(true); nextBossTime = Date.now() + 45000; }
 
     // Enemy Logic
-    enemies.forEach((en, i) => {
+    for (let i = enemies.length - 1; i >= 0; i--) {
+        let en = enemies[i];
         const d = Math.hypot(player.x - en.x, player.y - en.y);
         en.x += ((player.x - en.x) / d) * en.speed;
         en.y += ((player.y - en.y) / d) * en.speed;
         en.rot += 0.02;
+        
+        // --- TRAIL INTERSECTION CHECK ---
+        if (hasTrailAbility) {
+            let enemyEliminated = false;
+            for (let j = 0; j < shipTrail.length; j++) {
+                let point = shipTrail[j];
+                // Check if any trail coordinate falls inside the enemy's boundaries
+                if (point.x > en.x - en.size/2 && point.x < en.x + en.size/2 &&
+                    point.y > en.y - en.size/2 && point.y < en.y + en.size/2) {
+                    enemyEliminated = true;
+                    break;
+                }
+            }
+            if (enemyEliminated) {
+                createShatter(en.x, en.y, en.isBoss ? '#bc13fe' : '#ff0044', en.isBoss);
+                enemies.splice(i, 1);
+                score += 100; // Reward bonus score points
+                document.getElementById('scr').innerText = score;
+                logActivity("TRAIL ELIMINATED SENTRON");
+                continue; 
+            }
+        }
+
+        // Standard Player Collision
         if (d < (player.size * 0.7) + (en.size * 0.7)) gameOver();
-    });
+    }
 
     // Particle Logic
     particles.forEach((p, i) => {
@@ -215,6 +273,25 @@ function draw() {
         ctx.fillRect(p.x, p.y, p.size, p.size);
     });
     ctx.globalAlpha = 1;
+
+    // --- DRAW GLOWING PHOENIX TRAIL EFFECT ---
+    if (gameActive && hasTrailAbility && shipTrail.length > 1) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.strokeStyle = "#00d2ff"; 
+        ctx.shadowColor = "#0066ff";
+        ctx.shadowBlur = 15; 
+        ctx.lineWidth = 8; 
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        
+        ctx.moveTo(shipTrail[0].x, shipTrail[0].y);
+        for (let i = 1; i < shipTrail.length; i++) {
+            ctx.lineTo(shipTrail[i].x, shipTrail[i].y);
+        }
+        ctx.stroke();
+        ctx.restore();
+    }
 
     // Draw Enemies (Triangles)
     enemies.forEach(en => {
@@ -281,5 +358,3 @@ async function logActivity(action) {
         body: formBody
     }).catch(err => {}); 
 }
-
-//Final Update
