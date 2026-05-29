@@ -30,7 +30,7 @@ function setPlayerName(inputName) {
     playerName = inputName;
     
     // Unlocks ability if you use the master developer code!
-    if (playerName === "BLUE_PHOENIX_REBIRTH") {
+    if (playerName === "BLUE_PHOENIX") {
         hasTrailAbility = true;
         logActivity("DEVELOPER CHEAT CODE ACTIVATED");
     } else {
