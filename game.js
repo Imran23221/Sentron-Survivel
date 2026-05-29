@@ -61,8 +61,12 @@ function setPlayerName(inputName) {
         zeroCooldown = true;
         logActivity("DEVELOPER MATRIX: ZERO CD");
     } 
-    // OPTION 5: Individual Trail Matrix
+    // OPTION 5: Individual Magnet Matrix (Score boost only)
     else if (playerName === "VORTEX_MAGNET") {
+        logActivity("DEVELOPER MATRIX: PASSIVE MULTIPLIER");
+    }
+    // OPTION 6: Individual Phoenix Trail Matrix
+    else if (playerName === "PHOENIX_TRAIL") {
         hasTrailAbility = true;
         logActivity("DEVELOPER MATRIX: ENERGY TRAIL");
     }
