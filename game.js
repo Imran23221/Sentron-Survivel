@@ -19,6 +19,16 @@ let difficulty = 1;
 let selectedShipSrc = 'rocket.png';
 const shipImg = new Image();
 
+// Loop-ownership token: every call to startGame() mints a new id and the
+// running gameLoop checks it each frame. If startGame() runs again before
+// the old loop notices it should stop, the old loop's stale id makes it
+// bail instead of continuing to run alongside the new one. Without this,
+// calling startGame() twice in quick succession (e.g. a double-click on
+// REDEPLOY) stacks two requestAnimationFrame chains, and each one calls
+// update() once per frame — so movement speed effectively doubles (or
+// triples with three stacked loops), which reads as "supersonic" enemies.
+let gameLoopId = 0;
+
 let player = { x: canvas.width/2, y: canvas.height/2, size: 38, angle: 0 };
 let enemies = [];
 let particles = [];
@@ -97,7 +107,8 @@ function startGame(level) {
     document.querySelector('.ui-layer').style.display = 'block';
 
     logActivity(`MISSION START: ${playerName}`);
-    requestAnimationFrame(gameLoop);
+    const myLoopId = ++gameLoopId; // invalidate any previously running gameLoop chain
+    requestAnimationFrame(() => gameLoop(myLoopId));
 }
 
 // --- SYSTEM HANDLERS ---
@@ -117,8 +128,8 @@ function togglePause() {
     logActivity(isPaused ? "GAME PAUSED" : "GAME RESUMED");
 
     if (!isPaused) {
-        if (survivalActive) requestAnimationFrame(survivalLoop);
-        else requestAnimationFrame(gameLoop);
+        if (survivalActive) requestAnimationFrame(() => survivalLoop(survivalLoopId));
+        else requestAnimationFrame(() => gameLoop(gameLoopId));
     }
 }
 
@@ -374,10 +385,11 @@ function draw() {
     ctx.restore();
 }
 
-function gameLoop() {
+function gameLoop(loopId) {
+    if (loopId !== gameLoopId) return; // a newer startGame() has taken over — stop this stale chain
     update();
     draw();
-    if (gameActive && !isPaused) requestAnimationFrame(gameLoop);
+    if (gameActive && !isPaused) requestAnimationFrame(() => gameLoop(loopId));
 }
 
 async function logActivity(action) {
@@ -421,6 +433,11 @@ let sWave       = 1;
 let sKills      = 0;
 let sBossActive = false;
 let sWaveId     = 0;   // incremented each wave; stale setTimeout callbacks check this and bail
+
+// Same loop-ownership guard as gameLoopId above, but for survival mode's
+// requestAnimationFrame chain. startSurvival() mints a new id; survivalLoop()
+// checks it every frame and stops itself if a newer run has taken over.
+let survivalLoopId = 0;
 const KILLS_PER_BOSS = 20;
 
 // Tracks which power-up types the player has discovered (for inventory shop)
@@ -573,7 +590,8 @@ function startSurvival() {
     spawnSurvivalWave();
 
     logActivity(`SURVIVAL START: ${playerName}`);
-    requestAnimationFrame(survivalLoop);
+    const myLoopId = ++survivalLoopId; // invalidate any previously running survivalLoop chain
+    requestAnimationFrame(() => survivalLoop(myLoopId));
 }
 
 // =============================================================================
@@ -1297,10 +1315,11 @@ function updateSurvivalHUD() {
 // =============================================================================
 // SURVIVAL — MAIN LOOP
 // =============================================================================
-function survivalLoop() {
+function survivalLoop(loopId) {
+    if (loopId !== survivalLoopId) return; // a newer startSurvival() has taken over — stop this stale chain
     survivalUpdate();
     survivalDraw();
-    if (survivalActive && !isPaused) requestAnimationFrame(survivalLoop);
+    if (survivalActive && !isPaused) requestAnimationFrame(() => survivalLoop(loopId));
 }
 
 // =============================================================================
