@@ -578,12 +578,30 @@ function startSurvival() {
 
 // =============================================================================
 // SURVIVAL — WAVE SPAWNING
-// Enemies per wave: wave 1 = 2, wave 2 = 3, wave 3+ capped at 4 max.
-// Difficulty beyond wave 2 comes from speed/zigzag/HP, not quantity.
+// Endless "high score" growth — no cap, no finish line.
+// Base enemy count grows wave over wave, but the AMOUNT it grows by shrinks
+// every wave, settling toward a floor of +1 per wave forever (never flat).
+// Target feel: wave1 ~5-10, wave2 ~10-15, wave3 ~15-17, then small bumps on.
 // =============================================================================
+function getWaveEnemyCount(wave) {
+    // Cumulative base count via a shrinking per-wave increment.
+    // increment(w) shrinks roughly like 9/w, floored at 1 — so early waves
+    // jump a lot (wave1->2, wave2->3) and later waves creep up by ~1-2,
+    // settling toward +1/wave forever as the wave number grows.
+    let base = 7; // wave 1 starting point (mid of 5-10)
+    for (let w = 2; w <= wave; w++) {
+        const increment = Math.max(1, Math.round(9 / w));
+        base += increment;
+    }
+    // Small random spread layered on top so each wave isn't a fixed number
+    // (matches the "5 to 10", "10 to 15", "15 to 17" feel).
+    const spread = wave === 1 ? 2 : 1;
+    const count = base + Math.floor(Math.random() * (spread * 2 + 1)) - spread;
+    return Math.max(1, count);
+}
+
 function spawnSurvivalWave() {
-    // wave 1 = 2, wave 2 = 3, wave 3+ = 4. Never more — smooths the old 1->4 jump.
-    const count = Math.min(1 + sWave, 4);
+    const count = getWaveEnemyCount(sWave);
     const myWaveId = ++sWaveId; // snapshot — callbacks from old waves will have a stale id and bail
     for (let i = 0; i < count; i++) {
         setTimeout(() => {
@@ -602,16 +620,17 @@ function spawnSurvivalEnemy(isBoss) {
     const h = isBoss ? 84 : 36;
     const x = Math.random() * (canvas.width - w * 2) + w;
 
-    const baseSpd = isBoss ? 0.85 : 1.3 + sWave * 0.18;
+    // Fall speed — slowed down overall, and grows more gently per wave.
+    const baseSpd = isBoss ? 0.6 : 0.85 + sWave * 0.10;
     const spd     = puEffects.timeSlow.active ? baseSpd * 0.45 : baseSpd;
 
     // HP: bosses scale strongly; regulars get more HP from wave 3+
     const hp = isBoss ? 18 + sWave * 4 : Math.max(1, Math.floor(1 + (sWave - 1) * 0.6));
 
-    // Zigzag: unlocks from wave 2, amplitude AND speed grow each wave —
-    // this is the "harder via behavior, not count" knob for wave 2+.
-    const zigzagAmplitude = isBoss ? 0 : Math.max(0, (sWave - 1) * 0.4);
-    const zigzagSpeed     = isBoss ? 0 : 0.04 + (sWave - 1) * 0.012 + Math.random() * 0.02;
+    // Zigzag: unlocks from wave 2, amplitude AND speed grow each wave, but
+    // both are slowed down overall so the weave reads as a wobble, not a dart.
+    const zigzagAmplitude = isBoss ? 0 : Math.max(0, (sWave - 1) * 0.25);
+    const zigzagSpeed     = isBoss ? 0 : 0.022 + (sWave - 1) * 0.007 + Math.random() * 0.012;
 
     sEnemies.push({
         x, y: -h / 2 - 10,
@@ -849,7 +868,7 @@ function survivalUpdate() {
 // SURVIVAL — ENEMY BULLET FIRE
 // =============================================================================
 function fireEnemyBullet(en) {
-    const spd = en.isBoss ? 4.2 : 3.0;
+    const spd = en.isBoss ? 3.0 : 2.0; // slowed down, was 4.2 / 3.0
 
     if (en.isBoss) {
         [-0.35, 0, 0.35].forEach(offset => {
