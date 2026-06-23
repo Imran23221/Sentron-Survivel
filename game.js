@@ -118,8 +118,9 @@ function startGame(level) {
     nextBossTime = Date.now() + 45000;
 
     // Hide survival HUD, show classic HUD
-    document.getElementById('survivalHUD').style.display = 'none';
-    document.getElementById('powerupBar').style.display = 'none';
+    document.getElementById('survivalHUD').style.display      = 'none';
+    document.getElementById('powerupBar').style.display       = 'none';
+    document.getElementById('powerupBar-label').style.display = 'none';
     document.querySelector('.ui-layer').style.display = 'block';
     
     logActivity(`MISSION START: ${playerName}`);
@@ -165,12 +166,13 @@ function gameOver() {
 }
 
 function backToMenu() {
-    document.getElementById('gameOverScreen').style.display = 'none';
-    document.getElementById('survivalOverScreen').style.display = 'none';
-    document.getElementById('survivalHUD').style.display = 'none';
-    document.getElementById('powerupBar').style.display = 'none';
-    document.querySelector('.ui-layer').style.display = 'none';
-    document.getElementById('shipMenu').style.display = 'flex';
+    document.getElementById('gameOverScreen').style.display      = 'none';
+    document.getElementById('survivalOverScreen').style.display  = 'none';
+    document.getElementById('survivalHUD').style.display         = 'none';
+    document.getElementById('powerupBar').style.display          = 'none';
+    document.getElementById('powerupBar-label').style.display    = 'none';
+    document.querySelector('.ui-layer').style.display            = 'none';
+    document.getElementById('shipMenu').style.display            = 'flex';
     survivalActive = false;
     gameActive = false;
 }
@@ -546,8 +548,9 @@ function startSurvival() {
     document.querySelector('.ui-layer').style.display       = 'none';
 
     // Show survival HUD
-    document.getElementById('survivalHUD').style.display  = 'flex';
-    document.getElementById('powerupBar').style.display   = 'flex';
+    document.getElementById('survivalHUD').style.display       = 'flex';
+    document.getElementById('powerupBar').style.display        = 'flex';
+    document.getElementById('powerupBar-label').style.display  = 'block';
 
     // Reset all state
     survivalActive = true;
@@ -929,8 +932,9 @@ function survivalTakeDamage() {
 // =============================================================================
 function endSurvival() {
     survivalActive = false;
-    document.getElementById('survivalHUD').style.display  = 'none';
-    document.getElementById('powerupBar').style.display   = 'none';
+    document.getElementById('survivalHUD').style.display      = 'none';
+    document.getElementById('powerupBar').style.display       = 'none';
+    document.getElementById('powerupBar-label').style.display = 'none';
     document.getElementById('survFinalWave').innerText  = sWave;
     document.getElementById('survFinalScore').innerText = Math.floor(sScore);
     document.getElementById('survivalOverScreen').style.display = 'flex';
@@ -1013,6 +1017,7 @@ function renderPowerUpBar() {
             transition:0.15s; font-family:'Courier New',monospace;
             opacity:${pu ? (pu.firstUse || sCoins >= pu.cost ? '1' : '0.4') : '0.3'};
             box-shadow:${pu ? `0 0 10px ${pu.color}55` : 'none'};
+            pointer-events:auto; user-select:none;
         `;
 
         if (pu) {
@@ -1247,7 +1252,7 @@ function survivalDraw() {
     // --- Player ship ---
     ctx.save();
     ctx.translate(sPlayer.x, sPlayer.y);
-    ctx.rotate(Math.PI); // nose pointing up
+    // no rotation — PNG already faces upward
     ctx.shadowBlur  = 20;
     ctx.shadowColor = sPlayer.invincTimer > 0 ? '#ffff00' : '#00f2ff';
     if (sPlayer.invincTimer > 0) {

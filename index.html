@@ -74,13 +74,15 @@
         #powerupBar {
             display: none; /* shown by JS */
             position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
-            gap: 12px; z-index: 101; flex-direction: row; align-items: center;
+            gap: 12px; z-index: 200; flex-direction: row; align-items: center;
+            pointer-events: auto; /* REQUIRED — slots must be clickable */
         }
         #powerupBar-label {
             display: none;
-            position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%);
-            font-size: 0.6rem; color: #ff004477; letter-spacing: 4px;
-            z-index: 101; pointer-events: none;
+            position: fixed; bottom: 92px; left: 50%; transform: translateX(-50%);
+            font-size: 0.6rem; color: #ffaa0099; letter-spacing: 4px;
+            z-index: 200; pointer-events: none;
+            text-align: center; white-space: nowrap;
         }
 
         /* ===================== SURVIVAL GAME OVER ===================== */
