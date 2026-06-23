@@ -148,6 +148,8 @@ window.addEventListener('keydown', e => {
     if (survivalActive && !isPaused) {
         if (e.key === 'ArrowLeft'  || e.key === 'a') sKeys.left  = true;
         if (e.key === 'ArrowRight' || e.key === 'd') sKeys.right = true;
+        if (e.key === 'ArrowUp'    || e.key === 'w') sKeys.up    = true;
+        if (e.key === 'ArrowDown'  || e.key === 's') sKeys.down  = true;
         if (e.key === ' ') { e.preventDefault(); survivalShoot(); }
         if (e.key >= '1' && e.key <= '4') usePowerUp(parseInt(e.key) - 1);
     }
@@ -155,6 +157,8 @@ window.addEventListener('keydown', e => {
 window.addEventListener('keyup', e => {
     if (e.key === 'ArrowLeft'  || e.key === 'a') sKeys.left  = false;
     if (e.key === 'ArrowRight' || e.key === 'd') sKeys.right = false;
+    if (e.key === 'ArrowUp'    || e.key === 'w') sKeys.up    = false;
+    if (e.key === 'ArrowDown'  || e.key === 's') sKeys.down  = false;
 });
 
 function gameOver() {
@@ -469,7 +473,7 @@ async function logActivity(action) {
 // =============================================================================
 
 let survivalActive = false;
-const sKeys = { left: false, right: false, space: false };
+const sKeys = { left: false, right: false, up: false, down: false, space: false };
 
 // --- Survival Player ---
 let sPlayer = {
@@ -590,12 +594,13 @@ function startSurvival() {
 // SURVIVAL — WAVE SPAWNING
 // =============================================================================
 function spawnSurvivalWave() {
-    const count = 4 + sWave * 2;
+    // Reasonable enemy count: starts at 3, caps at 10 by wave 8+
+    const count = Math.min(3 + Math.floor(sWave * 0.9), 10);
     for (let i = 0; i < count; i++) {
         setTimeout(() => {
             if (!survivalActive) return;
             spawnSurvivalEnemy(false);
-        }, i * 420);
+        }, i * 900);  // stagger spawns so they don't flood at once
     }
 }
 
@@ -673,9 +678,11 @@ function triggerLaser() {
 function survivalUpdate() {
     if (!survivalActive || isPaused) return;
 
-    // Player movement
-    if (sKeys.left  && sPlayer.x - sPlayer.w / 2 > 0)             sPlayer.x -= sPlayer.speed;
-    if (sKeys.right && sPlayer.x + sPlayer.w / 2 < canvas.width)  sPlayer.x += sPlayer.speed;
+    // Player movement (all 4 directions)
+    if (sKeys.left  && sPlayer.x - sPlayer.w / 2 > 0)                      sPlayer.x -= sPlayer.speed;
+    if (sKeys.right && sPlayer.x + sPlayer.w / 2 < canvas.width)            sPlayer.x += sPlayer.speed;
+    if (sKeys.up    && sPlayer.y - sPlayer.h / 2 > 70)                      sPlayer.y -= sPlayer.speed;
+    if (sKeys.down  && sPlayer.y + sPlayer.h / 2 < canvas.height - 90)      sPlayer.y += sPlayer.speed;
 
     // Auto-shoot while space held
     if (sKeys.space) survivalShoot();
@@ -833,12 +840,12 @@ function survivalUpdate() {
     // ---- Passive score ----
     sScore += 0.025;
 
-    // ---- Wave clear check ----
-    if (!sBossActive && sEnemies.length === 0 && sPowerDrops.length === 0 && sCoinDrops.length === 0) {
+    // ---- Wave clear check — only enemies matter, drops can still be on field ----
+    if (!sBossActive && sEnemies.length === 0) {
         sWave++;
         sKills = 0;
         updateSurvivalHUD();
-        setTimeout(() => { if (survivalActive) spawnSurvivalWave(); }, 2000);
+        setTimeout(() => { if (survivalActive) spawnSurvivalWave(); }, 2200);
     }
 
     updateSurvivalHUD();
@@ -846,23 +853,37 @@ function survivalUpdate() {
 
 // =============================================================================
 // SURVIVAL — ENEMY BULLET FIRE
-// FIX #2 — Boss fires 1 bullet (was 3), regular enemies unchanged
+// No aimbot — enemies shoot downward with a random spread cone.
+// Bosses fire a 3-bullet spread (left/center/right) but still downward,
+// so the player can dodge by reading the pattern rather than being tracked.
 // =============================================================================
 function fireEnemyBullet(en) {
-    const dx   = sPlayer.x - en.x;
-    const dy   = sPlayer.y - en.y;
-    const dist = Math.hypot(dx, dy);
-    const spd  = en.isBoss ? 4.5 : 3.2;
+    const spd = en.isBoss ? 4.2 : 3.0;
 
-    // FIX: boss now fires 1 bullet (was 3), with slight inaccuracy so it's dodgeable
-    const jitter = (Math.random() - 0.5) * (en.isBoss ? 1.2 : 0.8);
-    sEBullets.push({
-        x: en.x, y: en.y + en.h / 2,
-        vx: (dx / dist) * spd + jitter,
-        vy: (dy / dist) * spd,
-        r: en.isBoss ? 7 : 4,
-        color: en.isBoss ? '#ff00ff' : '#ff6600',
-    });
+    if (en.isBoss) {
+        // Boss: 3-shot spread aimed loosely downward — dodgeable by moving sideways
+        [-0.35, 0, 0.35].forEach(offset => {
+            sEBullets.push({
+                x: en.x, y: en.y + en.h / 2,
+                vx: offset * spd * 2 + (Math.random() - 0.5) * 0.5,
+                vy: spd,
+                r: 6,
+                color: '#ff00ff',
+            });
+        });
+    } else {
+        // Regular enemy: shoots mostly straight down with a wide random spread
+        // Slight lean toward player X but heavily jittered — not a lock-on
+        const leanX = (sPlayer.x - en.x) / canvas.width * 1.5; // weak lean, max ~1.5px/frame
+        const jitter = (Math.random() - 0.5) * 2.8;
+        sEBullets.push({
+            x: en.x, y: en.y + en.h / 2,
+            vx: leanX + jitter,
+            vy: spd,
+            r: 4,
+            color: '#ff6600',
+        });
+    }
 }
 
 // =============================================================================
