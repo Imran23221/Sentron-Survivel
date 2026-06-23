@@ -578,11 +578,11 @@ function startSurvival() {
 
 // =============================================================================
 // SURVIVAL — WAVE SPAWNING
-// Enemies per wave: fixed 3 for wave 1, capped at 6 max from wave 2 onward.
-// Difficulty comes from HP and zigzag, not quantity.
+// Enemies per wave: wave 1 = 2, wave 2 = 3, wave 3+ capped at 4 max.
+// Difficulty beyond wave 2 comes from speed/zigzag/HP, not quantity.
 // =============================================================================
 function spawnSurvivalWave() {
-    // Hard cap: wave 1 = 2, wave 2 = 3, wave 3+ = 4. Never more.
+    // wave 1 = 2, wave 2 = 3, wave 3+ = 4. Never more — smooths the old 1->4 jump.
     const count = Math.min(1 + sWave, 4);
     const myWaveId = ++sWaveId; // snapshot — callbacks from old waves will have a stale id and bail
     for (let i = 0; i < count; i++) {
@@ -595,7 +595,7 @@ function spawnSurvivalWave() {
 
 // =============================================================================
 // SURVIVAL — ENEMY SPAWN
-// HP scales with wave. Zigzag amplitude increases with wave.
+// HP scales with wave. Zigzag amplitude/speed increases with wave.
 // =============================================================================
 function spawnSurvivalEnemy(isBoss) {
     const w = isBoss ? 84 : 36;
@@ -608,9 +608,10 @@ function spawnSurvivalEnemy(isBoss) {
     // HP: bosses scale strongly; regulars get more HP from wave 3+
     const hp = isBoss ? 18 + sWave * 4 : Math.max(1, Math.floor(1 + (sWave - 1) * 0.6));
 
-    // Zigzag: unlocks from wave 2, amplitude grows each wave
+    // Zigzag: unlocks from wave 2, amplitude AND speed grow each wave —
+    // this is the "harder via behavior, not count" knob for wave 2+.
     const zigzagAmplitude = isBoss ? 0 : Math.max(0, (sWave - 1) * 0.4);
-    const zigzagSpeed     = 0.04 + Math.random() * 0.02;
+    const zigzagSpeed     = isBoss ? 0 : 0.04 + (sWave - 1) * 0.012 + Math.random() * 0.02;
 
     sEnemies.push({
         x, y: -h / 2 - 10,
