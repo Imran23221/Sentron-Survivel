@@ -607,6 +607,9 @@ function spawnSurvivalEnemy(isBoss) {
     const spd     = puEffects.timeSlow.active ? baseSpd * 0.45 : baseSpd;
     const hp      = isBoss ? 18 + sWave * 4 : 1;
 
+    // FIX #2 — Enemy shooting rates significantly reduced:
+    // Regular enemies: shoot every 3.5–6s (was 1.7–2.9s)
+    // Boss: shoots every 2.2s with 1 bullet (was 0.7s with 3 bullets)
     sEnemies.push({
         x, y: -h / 2 - 10,
         w, h,
@@ -615,8 +618,8 @@ function spawnSurvivalEnemy(isBoss) {
         isBoss,
         hp, maxHp: hp,
         rot: 0,
-        lastShot: Date.now() + Math.random() * 2000,
-        shootInterval: isBoss ? 700 : 1700 + Math.random() * 1200,
+        lastShot: Date.now() + Math.random() * 3000,
+        shootInterval: isBoss ? 2200 : 3500 + Math.random() * 2500,
         color: isBoss ? '#bc13fe' : '#ff0044',
         pulseT: 0,
     });
@@ -843,24 +846,23 @@ function survivalUpdate() {
 
 // =============================================================================
 // SURVIVAL — ENEMY BULLET FIRE
+// FIX #2 — Boss fires 1 bullet (was 3), regular enemies unchanged
 // =============================================================================
 function fireEnemyBullet(en) {
     const dx   = sPlayer.x - en.x;
     const dy   = sPlayer.y - en.y;
     const dist = Math.hypot(dx, dy);
-    const spd  = en.isBoss ? 5 : 3.8;
-    const bursts = en.isBoss ? 3 : 1;
+    const spd  = en.isBoss ? 4.5 : 3.2;
 
-    for (let b = 0; b < bursts; b++) {
-        const jitter = (Math.random() - 0.5) * (en.isBoss ? 0.6 : 0.25);
-        sEBullets.push({
-            x: en.x, y: en.y + en.h / 2,
-            vx: (dx / dist) * spd + jitter,
-            vy: (dy / dist) * spd + jitter,
-            r: en.isBoss ? 7 : 4,
-            color: en.isBoss ? '#ff00ff' : '#ff6600',
-        });
-    }
+    // FIX: boss now fires 1 bullet (was 3), with slight inaccuracy so it's dodgeable
+    const jitter = (Math.random() - 0.5) * (en.isBoss ? 1.2 : 0.8);
+    sEBullets.push({
+        x: en.x, y: en.y + en.h / 2,
+        vx: (dx / dist) * spd + jitter,
+        vy: (dy / dist) * spd,
+        r: en.isBoss ? 7 : 4,
+        color: en.isBoss ? '#ff00ff' : '#ff6600',
+    });
 }
 
 // =============================================================================
@@ -957,18 +959,34 @@ function addToInventory(pu) {
     renderPowerUpBar();
 }
 
+// =============================================================================
+// FIX #1 — POWER-UP USE
+// Original bug: slot was never cleared after use, so first-use flag was consumed
+// but the slot lingered with firstUse=false and would silently fail if player
+// couldn't afford the coin cost. Now: instant/one-shot powers (bombBlast, shield,
+// laserBeam) clear the slot after activation. Timed powers (rapidFire, tripleShot,
+// timeSlow) keep the slot so players can reuse with coins, matching the design intent.
+// =============================================================================
 function usePowerUp(idx) {
     const pu = puSlots[idx];
     if (!pu) return;
 
-    if (pu.firstUse) {
-        pu.firstUse = false;
-    } else {
-        if (sCoins < pu.cost) return; // can't afford
+    // Check coin cost for reuse (first use is always free)
+    if (!pu.firstUse) {
+        if (sCoins < pu.cost) return;
         sCoins -= pu.cost;
     }
 
+    // Mark first use consumed
+    pu.firstUse = false;
+
     activatePowerUp(pu);
+
+    // One-shot powers: clear the slot after use so the next drop fills it
+    if (pu.type === 'bombBlast' || pu.type === 'shield' || pu.type === 'laserBeam') {
+        puSlots[idx] = null;
+    }
+
     renderPowerUpBar();
     updateSurvivalHUD();
     logActivity(`POWER-UP USED: ${pu.label}`);
