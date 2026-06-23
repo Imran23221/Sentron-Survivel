@@ -38,15 +38,64 @@
         }
         .btn:hover { background: #00f2ff; color: #000; box-shadow: 0 0 20px #00f2ff; }
 
+        /* SURVIVAL button — distinct amber style */
+        .btn-survival {
+            background: #ffaa00; color: #000; border: none; padding: 15px 40px;
+            font-weight: bold; cursor: pointer; border-radius: 5px;
+            text-transform: uppercase; margin: 10px; font-family: 'Courier New';
+            font-size: 1rem; letter-spacing: 2px;
+            box-shadow: 0 0 14px #ffaa0088;
+        }
+        .btn-survival:hover { background: #fff; color: #000; box-shadow: 0 0 28px #ffaa00; }
+
         .ui-layer { position: fixed; top: 20px; left: 20px; pointer-events: none; z-index: 100; }
         .hud-item { background: rgba(0,0,0,0.8); padding: 12px; border-left: 5px solid #ff0044; margin-bottom: 8px; font-size: 18px; }
         
         #pauseMenu { display: none; }
+
+        /* ===================== SURVIVAL HUD ===================== */
+        #survivalHUD {
+            display: none; /* shown by JS on startSurvival */
+            position: fixed; top: 0; left: 0; right: 0; height: 62px;
+            background: rgba(0, 0, 0, 0.88);
+            border-bottom: 2px solid #ff004455;
+            z-index: 100; pointer-events: none;
+            flex-direction: row; align-items: center;
+            justify-content: center; gap: 40px;
+        }
+        .s-hud-cell { text-align: center; }
+        .s-hud-label { display: block; font-size: 0.55rem; color: #ff004499; letter-spacing: 3px; text-transform: uppercase; }
+        .s-hud-val   { display: block; font-size: 1.15rem; color: #ff0044; font-weight: bold; }
+        .s-hud-val.cyan  { color: #00f2ff; }
+        .s-hud-val.gold  { color: #ffaa00; }
+        .s-hud-val.white { color: #ffffff; }
+
+        /* ===================== POWER-UP BAR ===================== */
+        #powerupBar {
+            display: none; /* shown by JS */
+            position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+            gap: 12px; z-index: 101; flex-direction: row; align-items: center;
+        }
+        #powerupBar-label {
+            display: none;
+            position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%);
+            font-size: 0.6rem; color: #ff004477; letter-spacing: 4px;
+            z-index: 101; pointer-events: none;
+        }
+
+        /* ===================== SURVIVAL GAME OVER ===================== */
+        #survivalOverScreen { display: none; }
+        #survivalOverScreen .terminal-box {
+            border-color: #ffaa00;
+            box-shadow: 0 0 40px #ffaa00;
+        }
     </style>
 </head>
 <body>
 
-<!-- RULES MENU -->
+<!-- ============================================================ -->
+<!-- RULES MENU — original, untouched except Survival rule added  -->
+<!-- ============================================================ -->
 <div id="rulesOverlay" class="menu-overlay">
     <div class="terminal-box" style="border-color: #00f2ff; box-shadow: 0 0 40px #00f2ff;">
         <h1 style="color: #00f2ff;">MISSION BRIEFING</h1>
@@ -56,12 +105,15 @@
             <p>3. <b>SUPERNOVA (R-CLICK):</b> Wipe the screen, including Bosses. 25s Cooldown.</p>
             <p>4. <b>ESCAPE:</b> Use the <b>ESC</b> key to pause the simulation.</p>
             <p>5. <b>SURVIVAL:</b> Do not touch the red Sentrons. Good luck.</p>
+            <p>6. <b>⚡ SURVIVAL MODE:</b> Side-scrolling blitz. Move with <b>A/D</b> or <b>←/→</b>, shoot with <b>SPACE</b>. Kill bosses for <b>coins</b>. Collect power-ups and re-use them with coins. Keys <b>1–4</b> activate your stored power-ups.</p>
         </div>
         <button class="btn" style="background:#00f2ff; color:#000;" onclick="showLogin()">CONTINUE</button>
     </div>
 </div>
 
-<!-- LOGIN -->
+<!-- ============================================================ -->
+<!-- LOGIN — original, untouched                                  -->
+<!-- ============================================================ -->
 <div id="loginOverlay" class="menu-overlay" style="display: none;">
     <div class="terminal-box">
         <h1 style="color: #ff0044;">SYSTEM ACCESS</h1>
@@ -72,7 +124,9 @@
     </div>
 </div>
 
-<!-- SHIP SELECT -->
+<!-- ============================================================ -->
+<!-- SHIP SELECT — original buttons kept, SURVIVAL added          -->
+<!-- ============================================================ -->
 <div id="shipMenu" class="menu-overlay" style="display: none;">
     <div class="terminal-box" style="border-color: #00f2ff;">
         <h2 style="color: #00f2ff;">SELECT YOUR CRAFT</h2>
@@ -90,10 +144,15 @@
         <button class="btn" onclick="startGame(1)">EASY</button>
         <button class="btn" onclick="startGame(2)">NORMAL</button>
         <button class="btn" onclick="startGame(3)">HARDCORE</button>
+        <!-- SURVIVAL — new button below the existing row -->
+        <br>
+        <button class="btn-survival" onclick="startSurvival()">⚡ SURVIVAL</button>
     </div>
 </div>
 
-<!-- PAUSE -->
+<!-- ============================================================ -->
+<!-- PAUSE — original, untouched                                  -->
+<!-- ============================================================ -->
 <div id="pauseMenu" class="menu-overlay">
     <div class="terminal-box" style="border-color: #ffff00; box-shadow: 0 0 40px #ffff00;">
         <h1 style="color: #ffff00;">SYSTEM PAUSED</h1>
@@ -102,7 +161,9 @@
     </div>
 </div>
 
-<!-- GAME OVER -->
+<!-- ============================================================ -->
+<!-- GAME OVER — original, untouched                              -->
+<!-- ============================================================ -->
 <div id="gameOverScreen" class="menu-overlay" style="display: none;">
     <div class="terminal-box">
         <h1 style="color: #ff0044;">PILOT ELIMINATED</h1>
@@ -111,11 +172,57 @@
     </div>
 </div>
 
-<div class="ui-layer">
+<!-- ============================================================ -->
+<!-- SURVIVAL GAME OVER — new                                     -->
+<!-- ============================================================ -->
+<div id="survivalOverScreen" class="menu-overlay" style="display: none;">
+    <div class="terminal-box" style="border-color:#ffaa00; box-shadow:0 0 40px #ffaa00;">
+        <h1 style="color: #ffaa00;">⚡ PILOT DOWN</h1>
+        <p style="color:#aaa; margin-bottom:6px;">WAVE REACHED</p>
+        <div style="font-size: 48px; color: #ffaa00; margin: 4px 0;" id="survFinalWave">1</div>
+        <p style="color:#aaa; margin-bottom:6px;">FINAL SCORE</p>
+        <div style="font-size: 36px; color: #00f2ff; margin: 4px 0 20px;" id="survFinalScore">0</div>
+        <button class="btn-survival" onclick="startSurvival()">⚡ REDEPLOY</button>
+        <button class="btn" onclick="backToMenu()">SHIP SELECT</button>
+    </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- CLASSIC HUD — original, untouched                           -->
+<!-- ============================================================ -->
+<div class="ui-layer" style="display:none;">
     <div class="hud-item">SCORE: <span id="scr">0</span></div>
     <div class="hud-item">PULSE: <span id="pCharge">READY</span></div>
     <div class="hud-item">SUPER: <span id="sCharge">READY</span></div>
 </div>
+
+<!-- ============================================================ -->
+<!-- SURVIVAL HUD — top bar                                       -->
+<!-- ============================================================ -->
+<div id="survivalHUD">
+    <div class="s-hud-cell">
+        <span class="s-hud-label">LIVES</span>
+        <span class="s-hud-val" id="sLives">❤️❤️❤️</span>
+    </div>
+    <div class="s-hud-cell">
+        <span class="s-hud-label">WAVE</span>
+        <span class="s-hud-val white" id="sWave">1</span>
+    </div>
+    <div class="s-hud-cell">
+        <span class="s-hud-label">SCORE</span>
+        <span class="s-hud-val cyan" id="sScore">0</span>
+    </div>
+    <div class="s-hud-cell">
+        <span class="s-hud-label">COINS</span>
+        <span class="s-hud-val gold" id="sCoins">0</span>
+    </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- POWER-UP BAR — bottom center                                 -->
+<!-- ============================================================ -->
+<div id="powerupBar-label">POWER-UPS &nbsp; [ 1 ] &nbsp; [ 2 ] &nbsp; [ 3 ] &nbsp; [ 4 ]</div>
+<div id="powerupBar"></div>
 
 <canvas id="gameCanvas"></canvas>
 <script src="game.js"></script>

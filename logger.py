@@ -15,6 +15,9 @@ WHITE = "\033[1;37m"
 VIOLET = "\033[1;35m"
 RESET = "\033[0m"
 
+# Survival-specific color (bright amber/orange)
+ORANGE = "\033[38;5;214m"
+
 log_history = []
 MAX_LOGS = 15
 
@@ -35,12 +38,20 @@ def render_firewall_dash():
             action = entry.get('action', 'IDLE')
             score = entry.get('score', '0')
             
+            # --- Original color rules (untouched) ---
             color = WHITE
             if "SHIP" in action or "CRAFT" in action: color = VIOLET
             elif "MODE" in action: color = CYAN
             elif "PAUSE" in action or "RESUME" in action: color = GOLD
             elif "ELIMINATED" in action or "QUIT" in action: color = RED
             elif "PULSE" in action or "CHEAT" in action: color = GREEN
+
+            # --- Survival-specific color rules (appended below) ---
+            elif "SURVIVAL START" in action: color = ORANGE
+            elif "SURVIVAL END" in action: color = RED
+            elif "SURVIVAL BOSS" in action: color = VIOLET
+            elif "POWER-UP USED" in action: color = ORANGE
+            elif "SURVIVAL" in action: color = ORANGE
             
             print(f" {CYAN}[{timestamp}]{RESET} {WHITE}{pilot}{RESET} -> {color}{action}{RESET} | {GOLD}SCORE: {score}{RESET}")
 
