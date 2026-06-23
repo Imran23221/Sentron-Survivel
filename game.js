@@ -420,7 +420,7 @@ let sCoins      = 0;
 let sWave       = 1;
 let sKills      = 0;
 let sBossActive = false;
-const KILLS_PER_BOSS = 10;
+const KILLS_PER_BOSS = 20;
 
 // Tracks which power-up types the player has discovered (for inventory shop)
 let sDiscoveredPowerUps = new Set();
@@ -581,13 +581,13 @@ function startSurvival() {
 // Difficulty comes from HP and zigzag, not quantity.
 // =============================================================================
 function spawnSurvivalWave() {
-    // Wave 1 = 3 enemies. After that, grows very slowly, capped at 6.
-    const count = sWave === 1 ? 3 : Math.min(3 + Math.floor((sWave - 1) * 0.5), 6);
+    // Hard cap: wave 1 = 2 enemies, wave 2 = 3, wave 3+ = 4 max. Never more.
+    const count = Math.min(1 + sWave, 4);
     for (let i = 0; i < count; i++) {
         setTimeout(() => {
             if (!survivalActive) return;
             spawnSurvivalEnemy(false);
-        }, i * 1100);
+        }, i * 1400);
     }
 }
 
@@ -830,6 +830,8 @@ function survivalUpdate() {
 
     sScore += 0.025;
 
+    // Only advance wave when all enemies (including any boss) are gone
+    const nonBossEnemies = sEnemies.filter(e => !e.isBoss).length;
     if (!sBossActive && sEnemies.length === 0) {
         sWave++;
         sKills = 0;
