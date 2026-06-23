@@ -420,6 +420,7 @@ let sCoins      = 0;
 let sWave       = 1;
 let sKills      = 0;
 let sBossActive = false;
+let sWaveId     = 0;   // incremented each wave; stale setTimeout callbacks check this and bail
 const KILLS_PER_BOSS = 20;
 
 // Tracks which power-up types the player has discovered (for inventory shop)
@@ -558,7 +559,7 @@ function startSurvival() {
     sPowerDrops = []; sCoinDrops = []; sParticles = [];
 
     sScore = 0; sCoins = 0; sWave = 1; sKills = 0;
-    sBossActive = false;
+    sBossActive = false; sWaveId = 0;
     sLastShot = Date.now();
     sDiscoveredPowerUps = new Set();
 
@@ -581,11 +582,12 @@ function startSurvival() {
 // Difficulty comes from HP and zigzag, not quantity.
 // =============================================================================
 function spawnSurvivalWave() {
-    // Hard cap: wave 1 = 2 enemies, wave 2 = 3, wave 3+ = 4 max. Never more.
+    // Hard cap: wave 1 = 2, wave 2 = 3, wave 3+ = 4. Never more.
     const count = Math.min(1 + sWave, 4);
+    const myWaveId = ++sWaveId; // snapshot — callbacks from old waves will have a stale id and bail
     for (let i = 0; i < count; i++) {
         setTimeout(() => {
-            if (!survivalActive) return;
+            if (!survivalActive || sWaveId !== myWaveId) return; // stale — ignore
             spawnSurvivalEnemy(false);
         }, i * 1400);
     }
@@ -830,11 +832,11 @@ function survivalUpdate() {
 
     sScore += 0.025;
 
-    // Only advance wave when all enemies (including any boss) are gone
-    const nonBossEnemies = sEnemies.filter(e => !e.isBoss).length;
+    // Advance wave only when every enemy (including boss) is fully cleared
     if (!sBossActive && sEnemies.length === 0) {
         sWave++;
         sKills = 0;
+        sWaveId++; // invalidate any leftover spawn callbacks from the previous wave
         updateSurvivalHUD();
         setTimeout(() => { if (survivalActive) spawnSurvivalWave(); }, 2200);
     }
