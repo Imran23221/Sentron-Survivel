@@ -432,7 +432,33 @@ let sCoins      = 0;
 let sWave       = 1;
 let sKills      = 0;
 let sBossActive = false;
+let sWaveAdvancing = false; // guards the wave-clear block in survivalUpdate() from re-firing every frame
 let sWaveId     = 0;   // incremented each wave; stale setTimeout callbacks check this and bail
+
+// --- Combo / multiplier system ---
+// Killing enemies without taking damage builds a streak. The multiplier
+// steps up at fixed streak thresholds and resets the instant the player
+// takes a hit (see survivalTakeDamage()). This rewards careful, sustained
+// play over button-mashing, on top of the raw per-wave difficulty.
+let sComboStreak = 0;
+let sComboMult   = 1;
+const COMBO_THRESHOLDS = [
+    { streak: 0,  mult: 1   },
+    { streak: 8,  mult: 1.5 },
+    { streak: 18, mult: 2   },
+    { streak: 32, mult: 3   },
+];
+
+// --- Session high scores (in-memory, resets on page reload) ---
+// Not persisted to disk/server — purely a "best of this browser session"
+// comparison shown on the survival game-over screen.
+let sSessionBestScore = 0;
+let sSessionBestWave  = 1;
+
+// --- Toast notifications ---
+// Small on-screen messages for milestones (boss kills, wave clears, combo
+// tier-ups). Purely cosmetic feedback layered on top of the canvas.
+let sToasts = [];
 
 // Same loop-ownership guard as gameLoopId above, but for survival mode's
 // requestAnimationFrame chain. startSurvival() mints a new id; survivalLoop()
@@ -453,6 +479,9 @@ let puEffects = {
     tripleShot: { active: false, timer: 0 },
     bombBlast:  { active: false, timer: 0 },
     timeSlow:   { active: false, timer: 0 },
+    homing:     { active: false, timer: 0 },
+    scoreBoost: { active: false, timer: 0 },
+    extraLife:  { active: false, timer: 0 }, // instant-use, never lingers as "active"
 };
 
 let sLastShot = 0;
@@ -477,6 +506,9 @@ const POWER_UP_DEFS = [
     { type:'tripleShot', icon:'🔱', label:'TRIPLE',     cost:5,  color:'#bc13fe', duration:7000  },
     { type:'bombBlast',  icon:'💥', label:'BOMB',       cost:6,  color:'#ff8800', duration:0     },
     { type:'timeSlow',   icon:'⏱', label:'SLOW-MO',    cost:5,  color:'#00ffaa', duration:6000  },
+    { type:'homing',     icon:'🎯', label:'HOMING',     cost:8,  color:'#66ff66', duration:9000  },
+    { type:'scoreBoost', icon:'✨', label:'2X SCORE',   cost:7,  color:'#ffd700', duration:10000 },
+    { type:'extraLife',  icon:'❤️', label:'EXTRA LIFE', cost:10, color:'#ff3366', duration:0     },
 ];
 
 // =============================================================================
@@ -573,10 +605,11 @@ function startSurvival() {
     sPlayer.invincTimer = 0;
 
     sBullets = []; sEnemies = []; sEBullets = [];
-    sPowerDrops = []; sCoinDrops = []; sParticles = [];
+    sPowerDrops = []; sCoinDrops = []; sParticles = []; sToasts = [];
 
     sScore = 0; sCoins = 0; sWave = 1; sKills = 0;
-    sBossActive = false; sWaveId = 0;
+    sBossActive = false; sWaveId = 0; sWaveAdvancing = false;
+    sComboStreak = 0; sComboMult = 1;
     sLastShot = Date.now();
     sDiscoveredPowerUps = new Set();
 
@@ -630,44 +663,116 @@ function spawnSurvivalWave() {
 }
 
 // =============================================================================
+// SURVIVAL — ENEMY TYPES
+// Beyond the base grunt and boss, three new enemy types add tactical variety
+// without relying on raw numbers:
+//   diver    — flies straight down fast, then locks onto the player and
+//              dashes toward them once it crosses a trigger height.
+//   splitter — slow and tanky-looking, but splits into two fast minis on
+//              death (the minis cannot split again).
+//   shielded — has a rotating energy shield that must be wholly depleted
+//              before its body HP can be damaged; shield regenerates if
+//              left alone for a few seconds.
+// Unlock waves keep the early game simple and introduce one new type at a
+// time so players can learn each threat before the next appears.
+// =============================================================================
+const ENEMY_TYPE_UNLOCK_WAVE = {
+    diver:    2,
+    splitter: 3,
+    shielded: 4,
+};
+
+function pickSurvivalEnemyType(wave) {
+    const pool = ['grunt'];
+    if (wave >= ENEMY_TYPE_UNLOCK_WAVE.diver)    pool.push('diver', 'diver');
+    if (wave >= ENEMY_TYPE_UNLOCK_WAVE.splitter) pool.push('splitter');
+    if (wave >= ENEMY_TYPE_UNLOCK_WAVE.shielded) pool.push('shielded');
+    return pool[Math.floor(Math.random() * pool.length)];
+}
+
+// =============================================================================
 // SURVIVAL — ENEMY SPAWN
 // HP scales with wave. Zigzag amplitude/speed increases with wave.
 // =============================================================================
-function spawnSurvivalEnemy(isBoss) {
-    const w = isBoss ? 84 : 36;
-    const h = isBoss ? 84 : 36;
+function spawnSurvivalEnemy(isBoss, forcedType) {
+    const enemyType = isBoss ? 'boss' : (forcedType || pickSurvivalEnemyType(sWave));
+
+    const sizeByType = {
+        grunt: 36, diver: 32, splitter: 44, shielded: 40, boss: 84, mini: 22,
+    };
+    const w = sizeByType[enemyType] || 36;
+    const h = w;
     const x = Math.random() * (canvas.width - w * 2) + w;
 
     // Fall speed — slowed down overall, and grows more gently per wave.
-    const baseSpd = isBoss ? 0.6 : 0.85 + sWave * 0.10;
+    // Divers fall faster than grunts to sell their "incoming threat" read.
+    const speedMultByType = { grunt: 1, diver: 1.35, splitter: 0.75, shielded: 0.85, boss: 1, mini: 1.5 };
+    const baseSpd = (isBoss ? 0.6 : 0.85 + sWave * 0.10) * (speedMultByType[enemyType] || 1);
     const spd     = puEffects.timeSlow.active ? baseSpd * 0.45 : baseSpd;
 
-    // HP: bosses scale strongly; regulars get more HP from wave 3+
-    const hp = isBoss ? 18 + sWave * 4 : Math.max(1, Math.floor(1 + (sWave - 1) * 0.6));
+    // HP: bosses scale strongly; regulars get more HP from wave 3+.
+    // Splitters and shielded enemies get a flat HP bonus to justify their
+    // higher threat level; minis (split children) are always 1 HP.
+    let hp;
+    if (isBoss) hp = 18 + sWave * 4;
+    else if (enemyType === 'mini') hp = 1;
+    else {
+        const base = Math.max(1, Math.floor(1 + (sWave - 1) * 0.6));
+        const bonusByType = { splitter: 2, shielded: 1 };
+        hp = base + (bonusByType[enemyType] || 0);
+    }
 
     // Zigzag: unlocks from wave 2, amplitude AND speed grow each wave, but
     // both are slowed down overall so the weave reads as a wobble, not a dart.
-    const zigzagAmplitude = isBoss ? 0 : Math.max(0, (sWave - 1) * 0.25);
-    const zigzagSpeed     = isBoss ? 0 : 0.022 + (sWave - 1) * 0.007 + Math.random() * 0.012;
+    // Divers and minis don't zigzag — their straight-line dash is the threat.
+    const zigzagCapable = !isBoss && enemyType !== 'diver' && enemyType !== 'mini';
+    const zigzagAmplitude = zigzagCapable ? Math.max(0, (sWave - 1) * 0.25) : 0;
+    const zigzagSpeed     = zigzagCapable ? 0.022 + (sWave - 1) * 0.007 + Math.random() * 0.012 : 0;
 
-    sEnemies.push({
+    const colorByType = {
+        grunt: '#ff0044', diver: '#ff6a00', splitter: '#ff00aa',
+        shielded: '#00c8ff', boss: '#bc13fe', mini: '#ff4488',
+    };
+
+    const enemy = {
         x, y: -h / 2 - 10,
         w, h,
         speed: spd,
         baseSpeed: baseSpd,
         isBoss,
+        enemyType,
         hp, maxHp: hp,
         rot: 0,
         lastShot: Date.now() + Math.random() * 3000,
         shootInterval: isBoss ? 2200 : 3500 + Math.random() * 2500,
-        color: isBoss ? '#bc13fe' : '#ff0044',
+        color: colorByType[enemyType] || '#ff0044',
         pulseT: 0,
         // Zigzag state
         zigzagAmplitude,
         zigzagSpeed,
         zigzagT: Math.random() * Math.PI * 2, // random phase offset
         baseX: x, // anchor x for zigzag calculation
-    });
+    };
+
+    // --- Diver-specific state ---
+    if (enemyType === 'diver') {
+        enemy.diverState = 'falling';       // falling -> locked -> dashing
+        enemy.diverTriggerY = canvas.height * (0.35 + Math.random() * 0.15);
+        enemy.dashVx = 0;
+        enemy.dashVy = 0;
+    }
+
+    // --- Shielded-specific state ---
+    if (enemyType === 'shielded') {
+        enemy.shieldHp = 3 + Math.floor(sWave * 0.4);
+        enemy.shieldMaxHp = enemy.shieldHp;
+        enemy.shieldRot = 0;
+        enemy.shieldRegenAt = 0; // timestamp; if hit, shield regens after a delay if untouched
+        enemy.shieldBroken = false;
+    }
+
+    sEnemies.push(enemy);
+    return enemy;
 }
 
 // =============================================================================
@@ -690,8 +795,9 @@ function survivalShoot() {
             vx: Math.sin(rad) * 7,
             vy: -14,
             r: 4,
-            color: '#00f2ff',
+            color: puEffects.homing.active ? '#66ff66' : '#00f2ff',
             trail: [],
+            homing: puEffects.homing.active,
         });
     });
 }
@@ -700,8 +806,9 @@ function triggerLaser() {
     for (let i = sEnemies.length - 1; i >= 0; i--) {
         const en = sEnemies[i];
         if (Math.abs(en.x - sPlayer.x) < en.w / 2 + 35) {
+            if (en.shieldHp) en.shieldHp = 0; // laser punches straight through shields
             en.hp = 0;
-            if (en.hp <= 0) killSurvivalEnemy(i);
+            killSurvivalEnemy(i);
         }
     }
     sBullets.push({ type: 'laser', x: sPlayer.x, life: 1 });
@@ -740,18 +847,40 @@ function survivalUpdate() {
         b.trail.push({ x: b.x, y: b.y });
         if (b.trail.length > 8) b.trail.shift();
 
+        // Homing bullets gently steer toward the nearest live enemy each
+        // frame rather than snapping to face it — keeps the curve readable
+        // instead of looking like teleportation.
+        if (b.homing && sEnemies.length > 0) {
+            let nearest = null, nearestDist = Infinity;
+            for (const en of sEnemies) {
+                const d = Math.hypot(en.x - b.x, en.y - b.y);
+                if (d < nearestDist) { nearestDist = d; nearest = en; }
+            }
+            if (nearest) {
+                const dx = nearest.x - b.x, dy = nearest.y - b.y;
+                const dist = Math.hypot(dx, dy) || 1;
+                const speed = Math.hypot(b.vx, b.vy);
+                const turnRate = 0.18; // 0 = no homing, 1 = instant snap
+                const targetVx = (dx / dist) * speed;
+                const targetVy = (dy / dist) * speed;
+                b.vx += (targetVx - b.vx) * turnRate;
+                b.vy += (targetVy - b.vy) * turnRate;
+            }
+        }
+
         b.x += b.vx;
         b.y += b.vy;
 
-        if (b.y < -20) { sBullets.splice(i, 1); continue; }
+        if (b.y < -20 || b.y > canvas.height + 20 || b.x < -20 || b.x > canvas.width + 20) {
+            sBullets.splice(i, 1); continue;
+        }
 
         let hit = false;
         for (let j = sEnemies.length - 1; j >= 0; j--) {
             const en = sEnemies[j];
             if (b.x > en.x - en.w/2 && b.x < en.x + en.w/2 &&
                 b.y > en.y - en.h/2 && b.y < en.y + en.h/2) {
-                en.hp--;
-                if (en.hp <= 0) killSurvivalEnemy(j);
+                applyDamageToEnemy(en, j, 1);
                 hit = true;
                 break;
             }
@@ -766,26 +895,61 @@ function survivalUpdate() {
         // Apply timeSlow
         en.speed = puEffects.timeSlow.active ? en.baseSpeed * 0.45 : en.baseSpeed;
 
-        // Zigzag horizontal movement — sine wave offset on X
-        if (en.zigzagAmplitude > 0) {
-            en.zigzagT += en.zigzagSpeed;
-            en.x = en.baseX + Math.sin(en.zigzagT) * en.zigzagAmplitude * 60;
-            // Clamp to screen
-            en.x = Math.max(en.w / 2, Math.min(canvas.width - en.w / 2, en.x));
+        if (en.enemyType === 'diver') {
+            // Diver state machine: fall straight down, then once past its
+            // trigger height, lock onto the player's current position and
+            // dash there in a straight line — a fast, readable threat that
+            // rewards repositioning rather than raw reflexes.
+            if (en.diverState === 'falling') {
+                en.y += en.speed;
+                if (en.y >= en.diverTriggerY) {
+                    en.diverState = 'dashing';
+                    const dx = sPlayer.x - en.x, dy = sPlayer.y - en.y;
+                    const dist = Math.hypot(dx, dy) || 1;
+                    const dashSpeed = en.speed * 3.2;
+                    en.dashVx = (dx / dist) * dashSpeed;
+                    en.dashVy = (dy / dist) * dashSpeed;
+                }
+            } else {
+                en.x += en.dashVx;
+                en.y += en.dashVy;
+            }
+        } else {
+            // Zigzag horizontal movement — sine wave offset on X
+            if (en.zigzagAmplitude > 0) {
+                en.zigzagT += en.zigzagSpeed;
+                en.x = en.baseX + Math.sin(en.zigzagT) * en.zigzagAmplitude * 60;
+                // Clamp to screen
+                en.x = Math.max(en.w / 2, Math.min(canvas.width - en.w / 2, en.x));
+            }
+            en.y += en.speed;
         }
 
-        en.y     += en.speed;
+        // Shield regen — if a shielded enemy hasn't been hit in a while,
+        // its shield slowly comes back online.
+        if (en.enemyType === 'shielded' && en.shieldBroken && en.shieldRegenAt &&
+            Date.now() > en.shieldRegenAt && en.shieldHp < en.shieldMaxHp) {
+            en.shieldHp = Math.min(en.shieldMaxHp, en.shieldHp + 0.02);
+            if (en.shieldHp >= en.shieldMaxHp) en.shieldBroken = false;
+        }
+        if (en.enemyType === 'shielded') en.shieldRot += 0.05;
+
         en.rot   += 0.025;
         en.pulseT = (en.pulseT || 0) + 0.08;
 
-        if (en.y > canvas.height + en.h) {
+        // Dashing divers and minis that fly off any edge (not just bottom)
+        // should despawn without penalty — only a missed bottom-exit by a
+        // falling enemy counts as a hit the player failed to stop.
+        const offBottom = en.y > canvas.height + en.h;
+        const offSide   = en.x < -en.w * 2 || en.x > canvas.width + en.w * 2;
+        if (offBottom || (en.enemyType === 'diver' && en.diverState === 'dashing' && offSide)) {
             sEnemies.splice(i, 1);
-            survivalTakeDamage();
+            if (offBottom) survivalTakeDamage();
             continue;
         }
 
         const now = Date.now();
-        if (now - en.lastShot > en.shootInterval) {
+        if (now - en.lastShot > en.shootInterval && en.enemyType !== 'diver' && en.enemyType !== 'mini') {
             en.lastShot = now;
             fireEnemyBullet(en);
         }
@@ -809,7 +973,7 @@ function survivalUpdate() {
         const b = sEBullets[i];
         b.x += b.vx; b.y += b.vy;
 
-        if (b.y > canvas.height + 10 || b.x < -10 || b.x > canvas.width + 10) {
+        if (b.y > canvas.height + 10 || b.y < -10 || b.x < -10 || b.x > canvas.width + 10) {
             sEBullets.splice(i, 1); continue;
         }
 
@@ -870,13 +1034,22 @@ function survivalUpdate() {
 
     sScore += 0.025;
 
-    // Advance wave only when every enemy (including boss) is fully cleared
-    if (!sBossActive && sEnemies.length === 0) {
+    // Advance wave only when every enemy (including boss) is fully cleared.
+    // sWaveAdvancing guards against this block re-firing on every frame
+    // during the gap between clearing the wave and the next wave's first
+    // enemy actually spawning (without it, sWave would increment dozens of
+    // times per second for the whole 2.2s gap).
+    if (!sBossActive && sEnemies.length === 0 && !sWaveAdvancing) {
+        sWaveAdvancing = true;
+        showSurvivalToast(`WAVE ${sWave} CLEAR`, '#00f2ff');
         sWave++;
         sKills = 0;
         sWaveId++; // invalidate any leftover spawn callbacks from the previous wave
         updateSurvivalHUD();
-        setTimeout(() => { if (survivalActive) spawnSurvivalWave(); }, 2200);
+        setTimeout(() => {
+            sWaveAdvancing = false;
+            if (survivalActive) spawnSurvivalWave();
+        }, 2200);
     }
 
     updateSurvivalHUD();
@@ -884,19 +1057,51 @@ function survivalUpdate() {
 
 // =============================================================================
 // SURVIVAL — ENEMY BULLET FIRE
+// Boss attacks rotate through three distinct patterns so a boss fight has
+// some rhythm to learn instead of firing the same spread every time:
+//   spread — the original 3-bullet fan, aimed roughly downward
+//   circle — a full-ring burst (telegraphed by a brief pre-flash)
+//   volley — a tighter, faster burst aimed directly at the player
 // =============================================================================
 function fireEnemyBullet(en) {
     const spd = en.isBoss ? 3.0 : 2.0; // slowed down, was 4.2 / 3.0
 
     if (en.isBoss) {
-        [-0.35, 0, 0.35].forEach(offset => {
-            sEBullets.push({
-                x: en.x, y: en.y + en.h / 2,
-                vx: offset * spd * 2 + (Math.random() - 0.5) * 0.5,
-                vy: spd,
-                r: 6, color: '#ff00ff',
+        en.bossAttackIndex = ((en.bossAttackIndex || 0) + 1) % 3;
+        const pattern = ['spread', 'circle', 'volley'][en.bossAttackIndex];
+
+        if (pattern === 'spread') {
+            [-0.35, 0, 0.35].forEach(offset => {
+                sEBullets.push({
+                    x: en.x, y: en.y + en.h / 2,
+                    vx: offset * spd * 2 + (Math.random() - 0.5) * 0.5,
+                    vy: spd,
+                    r: 6, color: '#ff00ff',
+                });
             });
-        });
+        } else if (pattern === 'circle') {
+            const ringCount = 10;
+            for (let s = 0; s < ringCount; s++) {
+                const a = (s / ringCount) * Math.PI * 2;
+                sEBullets.push({
+                    x: en.x, y: en.y,
+                    vx: Math.cos(a) * spd * 0.85,
+                    vy: Math.sin(a) * spd * 0.85,
+                    r: 5, color: '#ff66ff',
+                });
+            }
+        } else { // volley — tighter, faster, aimed straight at the player
+            const dx = sPlayer.x - en.x, dy = sPlayer.y - en.y;
+            const dist = Math.hypot(dx, dy) || 1;
+            for (let s = -1; s <= 1; s++) {
+                sEBullets.push({
+                    x: en.x, y: en.y + en.h / 2,
+                    vx: (dx / dist) * spd * 1.4 + s * 0.6,
+                    vy: (dy / dist) * spd * 1.4,
+                    r: 5, color: '#ff0066',
+                });
+            }
+        }
     } else {
         const leanX = (sPlayer.x - en.x) / canvas.width * 1.5;
         const jitter = (Math.random() - 0.5) * 2.8;
@@ -910,27 +1115,96 @@ function fireEnemyBullet(en) {
 }
 
 // =============================================================================
+// SURVIVAL — COMBO / MULTIPLIER SYSTEM
+// =============================================================================
+function registerSurvivalKill() {
+    sComboStreak++;
+    const prevMult = sComboMult;
+    for (let i = COMBO_THRESHOLDS.length - 1; i >= 0; i--) {
+        if (sComboStreak >= COMBO_THRESHOLDS[i].streak) {
+            sComboMult = COMBO_THRESHOLDS[i].mult;
+            break;
+        }
+    }
+    if (sComboMult > prevMult) {
+        showSurvivalToast(`COMBO x${sComboMult}!`, '#ffaa00');
+    }
+    return sComboMult;
+}
+
+function resetSurvivalCombo() {
+    if (sComboStreak >= 8) showSurvivalToast('COMBO BROKEN', '#ff0044');
+    sComboStreak = 0;
+    sComboMult   = 1;
+}
+
+// =============================================================================
+// SURVIVAL — TOAST NOTIFICATIONS
+// Small fading messages stacked at the top-center of the screen. Each toast
+// tracks its own life (1.0 -> 0) so survivalDraw() can fade and rise it.
+// =============================================================================
+function showSurvivalToast(text, color) {
+    sToasts.push({ text, color, life: 1.0, y: 0 });
+    if (sToasts.length > 4) sToasts.shift(); // don't let the stack grow unbounded
+}
+
+// =============================================================================
+// SURVIVAL — DAMAGE APPLICATION
+// Routes incoming damage through an enemy's shield (if any) before it can
+// touch body HP. Shielded enemies must have their shield fully depleted
+// first; any hit that connects also resets the shield's regen timer.
+// =============================================================================
+function applyDamageToEnemy(en, idx, amount) {
+    if (en.shieldHp && en.shieldHp > 0) {
+        en.shieldHp -= amount;
+        en.shieldRegenAt = Date.now() + 4000; // 4s of no hits before it starts regenerating
+        if (en.shieldHp <= 0) {
+            en.shieldHp = 0;
+            en.shieldBroken = true;
+            createSurvivalParticles(en.x, en.y, '#00c8ff', false);
+        }
+        return; // damage absorbed by shield this hit, body HP untouched
+    }
+    en.hp -= amount;
+    if (en.hp <= 0) killSurvivalEnemy(idx);
+}
+
+// =============================================================================
 // SURVIVAL — KILL ENEMY
 // =============================================================================
 function killSurvivalEnemy(idx) {
     const en = sEnemies[idx];
     createSurvivalParticles(en.x, en.y, en.color, en.isBoss);
-    sScore += en.isBoss ? 500 : 100;
+
+    // Combo multiplier — see registerSurvivalKill() for the streak logic.
+    const comboMult = registerSurvivalKill();
+    const boostMult = puEffects.scoreBoost.active ? 2 : 1;
+    const baseScore = en.isBoss ? 500 : (en.enemyType === 'mini' ? 40 : 100);
+    sScore += Math.round(baseScore * comboMult * boostMult);
     sKills++;
 
     if (en.isBoss) {
         // Boss always drops exactly 1 coin
-        sCoinDrops.push({
-            x: en.x,
-            y: en.y,
-            rot: 0,
-        });
+        sCoinDrops.push({ x: en.x, y: en.y, rot: 0 });
 
         // No power-up drop from boss — coins are the reward
         sBossActive = false;
         shakeAmt = 18;
+        showSurvivalToast('BOSS DESTROYED', '#bc13fe');
         logActivity(`SURVIVAL BOSS KILLED - WAVE: ${sWave}`);
     } else {
+        // Splitters spawn two fast minis on death (minis can't split again)
+        if (en.enemyType === 'splitter') {
+            for (let s = 0; s < 2; s++) {
+                const mini = spawnSurvivalEnemy(false, 'mini');
+                if (mini) {
+                    mini.x = en.x + (s === 0 ? -24 : 24);
+                    mini.y = en.y;
+                    mini.baseX = mini.x;
+                }
+            }
+        }
+
         // Regular enemies: drop power-ups only on wave 3 or earlier
         if (sWave <= 3 && Math.random() < 0.45) {
             dropPowerUp(en.x, en.y);
@@ -963,6 +1237,7 @@ function survivalTakeDamage() {
     sPlayer.lives--;
     sPlayer.invincTimer = 110;
     shakeAmt = 14;
+    resetSurvivalCombo();
     createSurvivalParticles(sPlayer.x, sPlayer.y, '#ff0044', false);
     if (sPlayer.lives <= 0) endSurvival();
     else updateSurvivalHUD();
@@ -973,6 +1248,13 @@ function survivalTakeDamage() {
 // =============================================================================
 function endSurvival() {
     survivalActive = false;
+
+    // Session high score tracking — best of this browser session only.
+    const isNewBestScore = Math.floor(sScore) > sSessionBestScore;
+    const isNewBestWave  = sWave > sSessionBestWave;
+    if (isNewBestScore) sSessionBestScore = Math.floor(sScore);
+    if (isNewBestWave)  sSessionBestWave  = sWave;
+
     document.getElementById('survivalHUD').style.display      = 'none';
     document.getElementById('powerupBar').style.display       = 'none';
     document.getElementById('powerupBar-label').style.display = 'none';
@@ -980,6 +1262,16 @@ function endSurvival() {
     document.getElementById('survivalInventory').style.display = 'none';
     document.getElementById('survFinalWave').innerText  = sWave;
     document.getElementById('survFinalScore').innerText = Math.floor(sScore);
+
+    const bestEl = document.getElementById('survSessionBest');
+    if (bestEl) {
+        bestEl.innerText = `SESSION BEST — WAVE ${sSessionBestWave} · SCORE ${sSessionBestScore}`;
+    }
+    const newBestEl = document.getElementById('survNewBestTag');
+    if (newBestEl) {
+        newBestEl.style.display = (isNewBestScore || isNewBestWave) ? 'block' : 'none';
+    }
+
     document.getElementById('survivalOverScreen').style.display = 'flex';
     logActivity(`SURVIVAL END - WAVE: ${sWave} SCORE: ${Math.floor(sScore)}`);
 }
@@ -1007,7 +1299,7 @@ function usePowerUp(idx) {
 
     activatePowerUp(pu);
 
-    if (pu.type === 'bombBlast' || pu.type === 'shield' || pu.type === 'laserBeam') {
+    if (pu.type === 'bombBlast' || pu.type === 'shield' || pu.type === 'laserBeam' || pu.type === 'extraLife') {
         puSlots[idx] = null;
     }
 
@@ -1024,6 +1316,7 @@ function activatePowerUp(pu) {
                 createSurvivalParticles(sEnemies[i].x, sEnemies[i].y, sEnemies[i].color, false);
                 sEnemies.splice(i, 1);
             } else {
+                sEnemies[i].shieldHp = 0; // bomb also punches through shields on bosses
                 sEnemies[i].hp -= 5;
                 if (sEnemies[i].hp <= 0) killSurvivalEnemy(i);
             }
@@ -1032,6 +1325,12 @@ function activatePowerUp(pu) {
         return;
     }
     if (pu.type === 'shield') { puEffects.shield.active = true; return; }
+    if (pu.type === 'extraLife') {
+        sPlayer.lives++;
+        showSurvivalToast('+1 LIFE', '#ff3366');
+        createSurvivalParticles(sPlayer.x, sPlayer.y, '#ff3366', false);
+        return;
+    }
     if (puEffects[pu.type]) {
         puEffects[pu.type].active = true;
         puEffects[pu.type].timer  = pu.duration;
@@ -1211,23 +1510,85 @@ function survivalDraw() {
             ctx.fillStyle = '#220000'; ctx.fillRect(-bw / 2, -en.h / 2 - 16, bw, 8);
             ctx.fillStyle = '#ff00ff'; ctx.shadowBlur = 6;
             ctx.fillRect(-bw / 2, -en.h / 2 - 16, bw * (en.hp / en.maxHp), 8);
+        } else if (en.enemyType === 'diver') {
+            // Sharp arrowhead — reads as "fast and pointed" even before it dashes
+            ctx.beginPath();
+            ctx.moveTo(0, en.h / 2);
+            ctx.lineTo(en.w / 2, -en.h / 4);
+            ctx.lineTo(en.w / 5, -en.h / 2);
+            ctx.lineTo(-en.w / 5, -en.h / 2);
+            ctx.lineTo(-en.w / 2, -en.h / 4);
+            ctx.closePath(); ctx.fill();
+            if (en.diverState === 'dashing') {
+                ctx.strokeStyle = '#ffffff88'; ctx.lineWidth = 1.5; ctx.stroke();
+            }
+        } else if (en.enemyType === 'splitter') {
+            // Two overlapping diamonds hint that it splits on death
+            ctx.beginPath();
+            ctx.moveTo(-en.w / 5, en.h / 2); ctx.lineTo(-en.w / 2, 0);
+            ctx.lineTo(-en.w / 5, -en.h / 2); ctx.lineTo(en.w / 10, 0);
+            ctx.closePath(); ctx.fill();
+            ctx.beginPath();
+            ctx.moveTo(en.w / 5, en.h / 2); ctx.lineTo(-en.w / 10, 0);
+            ctx.lineTo(en.w / 5, -en.h / 2); ctx.lineTo(en.w / 2, 0);
+            ctx.closePath(); ctx.fill();
+        } else if (en.enemyType === 'shielded') {
+            // Hexagonal core, shield ring drawn separately below
+            ctx.beginPath();
+            for (let s = 0; s < 6; s++) {
+                const a = (s / 6) * Math.PI * 2;
+                s === 0
+                    ? ctx.moveTo(Math.cos(a) * en.w / 2.6, Math.sin(a) * en.h / 2.6)
+                    : ctx.lineTo(Math.cos(a) * en.w / 2.6, Math.sin(a) * en.h / 2.6);
+            }
+            ctx.closePath(); ctx.fill();
+        } else if (en.enemyType === 'mini') {
+            // Tiny triangle, smaller and simpler than a grunt
+            ctx.beginPath();
+            ctx.moveTo(0, en.h / 2);
+            ctx.lineTo(en.w / 2, -en.h / 2);
+            ctx.lineTo(-en.w / 2, -en.h / 2);
+            ctx.closePath(); ctx.fill();
         } else {
+            // grunt — original triangle silhouette
             ctx.beginPath();
             ctx.moveTo(0,          en.h / 2);
             ctx.lineTo( en.w / 2, -en.h / 2);
             ctx.lineTo(-en.w / 2, -en.h / 2);
             ctx.closePath(); ctx.fill();
+        }
 
-            // HP bar for multi-HP regular enemies (wave 3+)
-            if (en.maxHp > 1) {
-                ctx.rotate(-en.rot); ctx.scale(1 / pulse, 1 / pulse);
-                const bw = en.w;
-                ctx.fillStyle = '#220000'; ctx.fillRect(-bw / 2, -en.h / 2 - 10, bw, 5);
-                ctx.fillStyle = '#ff0044'; ctx.shadowBlur = 4;
-                ctx.fillRect(-bw / 2, -en.h / 2 - 10, bw * (en.hp / en.maxHp), 5);
-            }
+        // HP bar for any multi-HP non-boss enemy (wave 3+ grunts, splitters, shielded)
+        if (!en.isBoss && en.maxHp > 1) {
+            ctx.rotate(-en.rot); ctx.scale(1 / pulse, 1 / pulse);
+            const bw = en.w;
+            ctx.fillStyle = '#220000'; ctx.fillRect(-bw / 2, -en.h / 2 - 10, bw, 5);
+            ctx.fillStyle = '#ff0044'; ctx.shadowBlur = 4;
+            ctx.fillRect(-bw / 2, -en.h / 2 - 10, bw * (en.hp / en.maxHp), 5);
         }
         ctx.restore();
+
+        // Shield ring — drawn outside the main save/restore so its own
+        // rotation doesn't inherit the enemy's pulse scale, keeping the
+        // ring's stroke width consistent regardless of body pulsing.
+        if (en.enemyType === 'shielded' && en.shieldHp > 0) {
+            ctx.save();
+            ctx.translate(en.x, en.y);
+            ctx.rotate(en.shieldRot);
+            ctx.strokeStyle = '#00c8ff';
+            ctx.shadowColor = '#00c8ff'; ctx.shadowBlur = 12;
+            ctx.globalAlpha = 0.4 + (en.shieldHp / en.shieldMaxHp) * 0.5;
+            ctx.lineWidth = 2.5;
+            const segs = 8;
+            for (let s = 0; s < segs; s++) {
+                const a0 = (s / segs) * Math.PI * 2;
+                const a1 = a0 + (Math.PI * 2 / segs) * 0.65; // gaps between segments
+                ctx.beginPath();
+                ctx.arc(0, 0, en.w / 1.6, a0, a1);
+                ctx.stroke();
+            }
+            ctx.restore();
+        }
     });
 
     if (puEffects.shield.active) {
@@ -1279,6 +1640,37 @@ function survivalDraw() {
         ctx.restore();
         stripY += 34;
     });
+
+    // ---- Combo multiplier display (top-right) ----
+    if (sComboMult > 1 || sComboStreak > 0) {
+        ctx.save();
+        ctx.textAlign = 'right'; ctx.textBaseline = 'top';
+        ctx.font = 'bold 22px Courier New';
+        ctx.shadowColor = '#ffaa00'; ctx.shadowBlur = 10;
+        ctx.fillStyle = '#ffaa00';
+        ctx.fillText(`x${sComboMult} COMBO`, canvas.width - 20, 80);
+        ctx.font = '11px Courier New';
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#ffaa0099';
+        ctx.fillText(`${sComboStreak} STREAK`, canvas.width - 20, 105);
+        ctx.restore();
+    }
+
+    // ---- Toast notifications (top-center, fade + rise) ----
+    for (let i = sToasts.length - 1; i >= 0; i--) {
+        const t = sToasts[i];
+        t.life -= 0.012;
+        t.y -= 0.4;
+        if (t.life <= 0) { sToasts.splice(i, 1); continue; }
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, t.life * 1.5);
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.font = 'bold 18px Courier New';
+        ctx.shadowColor = t.color; ctx.shadowBlur = 14;
+        ctx.fillStyle = t.color;
+        ctx.fillText(t.text, canvas.width / 2, 150 + t.y - i * 26);
+        ctx.restore();
+    }
 
     ctx.restore();
 }

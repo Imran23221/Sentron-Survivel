@@ -90,6 +90,15 @@
             border-color: #ffaa00;
             box-shadow: 0 0 40px #ffaa00;
         }
+        .surv-best-line {
+            font-size: 0.7rem; color: #ffaa0099; letter-spacing: 2px;
+            margin-top: 18px; margin-bottom: 4px;
+        }
+        .surv-new-best-tag {
+            display: none;
+            font-size: 0.85rem; color: #00ff88; letter-spacing: 3px;
+            margin-bottom: 10px; text-shadow: 0 0 10px #00ff8888;
+        }
 
         /* ===================== SURVIVAL PAUSE MENU ===================== */
         #survivalPauseMenu {
@@ -234,6 +243,10 @@
         <div style="font-size: 48px; color: #ffaa00; margin: 4px 0;" id="survFinalWave">1</div>
         <p style="color:#aaa; margin-bottom:6px;">FINAL SCORE</p>
         <div style="font-size: 36px; color: #00f2ff; margin: 4px 0 20px;" id="survFinalScore">0</div>
+
+        <div class="surv-new-best-tag" id="survNewBestTag">★ NEW SESSION BEST ★</div>
+        <div class="surv-best-line" id="survSessionBest">SESSION BEST — WAVE 1 · SCORE 0</div>
+
         <button class="btn-survival" onclick="startSurvival()">⚡ REDEPLOY</button>
         <button class="btn" onclick="backToMenu()">SHIP SELECT</button>
     </div>
