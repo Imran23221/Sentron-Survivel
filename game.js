@@ -19,6 +19,16 @@ let difficulty = 1;
 let selectedShipSrc = 'rocket.png';
 const shipImg = new Image();
 
+// Loop-ownership token: every call to startGame() mints a new id and the
+// running gameLoop checks it each frame. If startGame() runs again before
+// the old loop notices it should stop, the old loop's stale id makes it
+// bail instead of continuing to run alongside the new one. Without this,
+// calling startGame() twice in quick succession (e.g. a double-click on
+// REDEPLOY) stacks two requestAnimationFrame chains, and each one calls
+// update() once per frame — so movement speed effectively doubles (or
+// triples with three stacked loops), which reads as "supersonic" enemies.
+let gameLoopId = 0;
+
 let player = { x: canvas.width/2, y: canvas.height/2, size: 38, angle: 0 };
 let enemies = [];
 let particles = [];
@@ -28,6 +38,7 @@ let lastPulse = 0, lastSuper = 0, lastScoreTime = 0;
 let nextBossTime = 0, flashEffect = { timer: 0, color: '#fff', size: 0 };
 let shakeAmt = 0;
 
+// --- DEVELOPER REGISTRATION ---
 function setPlayerName(inputName) {
     playerName = inputName;
     hasTrailAbility = false;
@@ -51,6 +62,7 @@ function setPlayerName(inputName) {
     }
 }
 
+// --- MENU NAVIGATION ---
 function showLogin() {
     document.getElementById('rulesOverlay').style.display = 'none';
     document.getElementById('loginOverlay').style.display = 'flex';
@@ -77,39 +89,52 @@ function startGame(level) {
     shipImg.src = selectedShipSrc;
     document.getElementById('shipMenu').style.display = 'none';
     document.getElementById('gameOverScreen').style.display = 'none';
-    score = 0; enemies = []; particles = []; shipTrail = [];
-    gameActive = true; isPaused = false;
-    lastPulse = Date.now(); lastSuper = Date.now();
-    lastScoreTime = Date.now(); nextBossTime = Date.now() + 45000;
+
+    score = 0;
+    enemies = [];
+    particles = [];
+    shipTrail = [];
+    gameActive = true;
+    isPaused = false;
+    lastPulse = Date.now();
+    lastSuper = Date.now();
+    lastScoreTime = Date.now();
+    nextBossTime = Date.now() + 45000;
+
     document.getElementById('survivalHUD').style.display      = 'none';
     document.getElementById('powerupBar').style.display       = 'none';
     document.getElementById('powerupBar-label').style.display = 'none';
     document.querySelector('.ui-layer').style.display = 'block';
+
     logActivity(`MISSION START: ${playerName}`);
-    requestAnimationFrame(gameLoop);
+    const myLoopId = ++gameLoopId; // invalidate any previously running gameLoop chain
+    requestAnimationFrame(() => gameLoop(myLoopId));
 }
 
+// --- SYSTEM HANDLERS ---
 function togglePause() {
     if (!gameActive && !survivalActive) return;
     isPaused = !isPaused;
+
     if (survivalActive) {
-        document.getElementById('survivalPauseMenu').style.display = isPaused ? 'flex' : 'none';
+        // Show survival pause menu with inventory button
         document.getElementById('pauseMenu').style.display = 'none';
+        document.getElementById('survivalPauseMenu').style.display = isPaused ? 'flex' : 'none';
+        if (!isPaused) closeSurvivalInventory();
     } else {
         document.getElementById('pauseMenu').style.display = isPaused ? 'flex' : 'none';
     }
+
     logActivity(isPaused ? "GAME PAUSED" : "GAME RESUMED");
+
     if (!isPaused) {
-        if (survivalActive) requestAnimationFrame(survivalLoop);
-        else requestAnimationFrame(gameLoop);
+        if (survivalActive) requestAnimationFrame(() => survivalLoop(survivalLoopId));
+        else requestAnimationFrame(() => gameLoop(gameLoopId));
     }
 }
 
 window.addEventListener('keydown', e => {
-    if (e.key === "Escape") {
-        if (survivalActive && survivalInventoryOpen) { closeSurvivalInventory(); return; }
-        togglePause();
-    }
+    if (e.key === "Escape") togglePause();
     if (survivalActive && !isPaused) {
         if (e.key === 'ArrowLeft'  || e.key === 'a') sKeys.left  = true;
         if (e.key === 'ArrowRight' || e.key === 'd') sKeys.right = true;
@@ -124,10 +149,6 @@ window.addEventListener('keyup', e => {
     if (e.key === 'ArrowRight' || e.key === 'd') sKeys.right = false;
     if (e.key === 'ArrowUp'    || e.key === 'w') sKeys.up    = false;
     if (e.key === 'ArrowDown'  || e.key === 's') sKeys.down  = false;
-    if (e.key === ' ') sKeys.space = false;
-});
-window.addEventListener('keydown', e => {
-    if (e.key === ' ' && survivalActive && !isPaused) sKeys.space = true;
 });
 
 function gameOver() {
@@ -144,13 +165,15 @@ function backToMenu() {
     document.getElementById('survivalHUD').style.display         = 'none';
     document.getElementById('powerupBar').style.display          = 'none';
     document.getElementById('powerupBar-label').style.display    = 'none';
-    document.getElementById('survivalPauseMenu').style.display   = 'none';
     document.querySelector('.ui-layer').style.display            = 'none';
+    document.getElementById('survivalPauseMenu').style.display   = 'none';
+    document.getElementById('survivalInventory').style.display   = 'none';
     document.getElementById('shipMenu').style.display            = 'flex';
     survivalActive = false;
     gameActive = false;
 }
 
+// --- SHATTER & PARTICLES ---
 function createShatter(x, y, color, isBoss) {
     const count = isBoss ? 50 : 12;
     for (let i = 0; i < count; i++) {
@@ -160,11 +183,12 @@ function createShatter(x, y, color, isBoss) {
             vy: (Math.random() - 0.5) * 8,
             size: Math.random() * 4 + 2,
             life: 1.0,
-            color,
+            color
         });
     }
 }
 
+// --- GAMEPLAY MECHANICS ---
 window.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
 window.addEventListener('mousedown', e => {
     if (survivalActive) return;
@@ -179,6 +203,7 @@ function spawnEnemy(isBoss = false) {
     let baseSpeed = (1.6 + (difficulty * 0.7));
     if (slowMotion) baseSpeed *= 0.5;
     const speed = isBoss ? (slowMotion ? 0.45 : 0.9) : baseSpeed;
+
     let x, y;
     if (Math.random() < 0.5) {
         x = Math.random() < 0.5 ? -size : canvas.width + size;
@@ -195,9 +220,11 @@ function triggerPulse(isSuper) {
     const cd = isSuper ? 25000 : 6000;
     const last = isSuper ? lastSuper : lastPulse;
     const range = isSuper ? 600 : 300;
+
     if (zeroCooldown || (now - last >= cd)) {
         flashEffect = { timer: 25, color: isSuper ? '#ffff00' : '#00f2ff', size: range };
         shakeAmt = isSuper ? 10 : 5;
+
         enemies = enemies.filter(en => {
             const dist = Math.hypot(player.x - en.x, player.y - en.y);
             if (dist < range) {
@@ -207,6 +234,7 @@ function triggerPulse(isSuper) {
             }
             return true;
         });
+
         if (isSuper) lastSuper = now; else lastPulse = now;
         logActivity(isSuper ? "SUPERNOVA" : "PULSE");
     }
@@ -214,106 +242,154 @@ function triggerPulse(isSuper) {
 
 function update() {
     if (!gameActive || isPaused) return;
+
     player.x += (mouse.x - player.x) * 0.12;
     player.y += (mouse.y - player.y) * 0.12;
     player.angle = Math.atan2(mouse.y - player.y, mouse.x - player.x) + Math.PI/2;
+
     if (hasTrailAbility) {
         shipTrail.push({ x: player.x, y: player.y });
         if (shipTrail.length > 40) shipTrail.shift();
-    } else { shipTrail = []; }
+    } else {
+        shipTrail = [];
+    }
+
     if (Date.now() - lastScoreTime > 1000) {
         score += (playerName === "BLUE_PHOENIX" || playerName === "VORTEX_MAGNET") ? 10 : 1;
         lastScoreTime = Date.now();
         document.getElementById('scr').innerText = score;
     }
+
     const pWait = zeroCooldown ? 0 : Math.max(0, Math.ceil((6000 - (Date.now() - lastPulse))/1000));
     const sWait = zeroCooldown ? 0 : Math.max(0, Math.ceil((25000 - (Date.now() - lastSuper))/1000));
     document.getElementById('pCharge').innerText = pWait === 0 ? "READY" : pWait + "S";
     document.getElementById('sCharge').innerText = sWait === 0 ? "READY" : sWait + "S";
+
     if (Math.random() < 0.04 + (difficulty * 0.015)) spawnEnemy(false);
     if (Date.now() > nextBossTime) { spawnEnemy(true); nextBossTime = Date.now() + 45000; }
+
     for (let i = enemies.length - 1; i >= 0; i--) {
         let en = enemies[i];
         const d = Math.hypot(player.x - en.x, player.y - en.y);
         en.x += ((player.x - en.x) / d) * en.speed;
         en.y += ((player.y - en.y) / d) * en.speed;
         en.rot += 0.02;
+
         if (hasTrailAbility) {
-            let elim = false;
+            let enemyEliminated = false;
             for (let j = 0; j < shipTrail.length; j++) {
-                const pt = shipTrail[j];
-                if (pt.x > en.x - en.size/2 && pt.x < en.x + en.size/2 &&
-                    pt.y > en.y - en.size/2 && pt.y < en.y + en.size/2) { elim = true; break; }
+                let point = shipTrail[j];
+                if (point.x > en.x - en.size/2 && point.x < en.x + en.size/2 &&
+                    point.y > en.y - en.size/2 && point.y < en.y + en.size/2) {
+                    enemyEliminated = true;
+                    break;
+                }
             }
-            if (elim) {
+            if (enemyEliminated) {
                 createShatter(en.x, en.y, en.isBoss ? '#bc13fe' : '#ff0044', en.isBoss);
-                enemies.splice(i, 1); score += 300;
+                enemies.splice(i, 1);
+                score += 300;
                 document.getElementById('scr').innerText = score;
-                logActivity("TRAIL ELIMINATED SENTRON"); continue;
+                logActivity("TRAIL ELIMINATED SENTRON");
+                continue;
             }
         }
+
         if (d < (player.size * 0.7) + (en.size * 0.7)) {
             if (isInvincible) {
                 createShatter(en.x, en.y, en.isBoss ? '#bc13fe' : '#ff0044', en.isBoss);
-                enemies.splice(i, 1); score += 300;
+                enemies.splice(i, 1);
+                score += 300;
                 document.getElementById('scr').innerText = score;
                 logActivity("ARMOR CRUSHED SENTRON");
-            } else { gameOver(); }
+            } else {
+                gameOver();
+            }
         }
     }
+
     particles.forEach((p, i) => {
-        p.x += p.vx; p.y += p.vy; p.life -= 0.02;
+        p.x += p.vx; p.y += p.vy;
+        p.life -= 0.02;
         if (p.life <= 0) particles.splice(i, 1);
     });
+
     if (shakeAmt > 0) shakeAmt *= 0.9;
 }
 
 function draw() {
     ctx.fillStyle = 'rgba(0, 5, 15, 0.4)';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
+
     ctx.save();
-    if (shakeAmt > 0.1) ctx.translate((Math.random()-0.5)*shakeAmt, (Math.random()-0.5)*shakeAmt);
+    if (shakeAmt > 0.1) {
+        ctx.translate((Math.random() - 0.5) * shakeAmt, (Math.random() - 0.5) * shakeAmt);
+    }
+
     particles.forEach(p => {
-        ctx.globalAlpha = p.life; ctx.fillStyle = p.color;
+        ctx.globalAlpha = p.life;
+        ctx.fillStyle = p.color;
         ctx.fillRect(p.x, p.y, p.size, p.size);
     });
     ctx.globalAlpha = 1;
+
     if (gameActive && hasTrailAbility && shipTrail.length > 1) {
         ctx.save();
-        ctx.beginPath(); ctx.strokeStyle = "#00d2ff"; ctx.shadowColor = "#0066ff";
-        ctx.shadowBlur = 15; ctx.lineWidth = 8; ctx.lineCap = "round"; ctx.lineJoin = "round";
+        ctx.beginPath();
+        ctx.strokeStyle = "#00d2ff";
+        ctx.shadowColor = "#0066ff";
+        ctx.shadowBlur = 15;
+        ctx.lineWidth = 8;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
         ctx.moveTo(shipTrail[0].x, shipTrail[0].y);
         for (let i = 1; i < shipTrail.length; i++) ctx.lineTo(shipTrail[i].x, shipTrail[i].y);
-        ctx.stroke(); ctx.restore();
+        ctx.stroke();
+        ctx.restore();
     }
+
     enemies.forEach(en => {
-        ctx.save(); ctx.translate(en.x, en.y); ctx.rotate(en.rot);
+        ctx.save();
+        ctx.translate(en.x, en.y);
+        ctx.rotate(en.rot);
         ctx.shadowBlur = en.isBoss ? 20 : 10;
         ctx.shadowColor = en.isBoss ? '#bc13fe' : '#ff0044';
         ctx.fillStyle = en.isBoss ? '#bc13fe' : '#ff0044';
         if (en.isBoss) ctx.fillRect(-en.size/2, -en.size/2, en.size, en.size);
         else {
-            ctx.beginPath(); ctx.moveTo(0, -en.size/2);
-            ctx.lineTo(en.size/2, en.size/2); ctx.lineTo(-en.size/2, en.size/2); ctx.fill();
+            ctx.beginPath();
+            ctx.moveTo(0, -en.size/2);
+            ctx.lineTo(en.size/2, en.size/2);
+            ctx.lineTo(-en.size/2, en.size/2);
+            ctx.fill();
         }
         ctx.restore();
     });
-    ctx.save(); ctx.translate(player.x, player.y); ctx.rotate(player.angle);
+
+    ctx.save();
+    ctx.translate(player.x, player.y);
+    ctx.rotate(player.angle);
     ctx.shadowBlur = 15; ctx.shadowColor = '#00f2ff';
     ctx.drawImage(shipImg, -player.size, -player.size, player.size*2, player.size*2);
     ctx.restore();
+
     if (flashEffect.timer > 0) {
         ctx.beginPath();
         ctx.arc(player.x, player.y, flashEffect.size * (1 - flashEffect.timer/25), 0, Math.PI*2);
-        ctx.strokeStyle = flashEffect.color; ctx.lineWidth = flashEffect.timer; ctx.stroke();
+        ctx.strokeStyle = flashEffect.color;
+        ctx.lineWidth = flashEffect.timer;
+        ctx.stroke();
         flashEffect.timer--;
     }
+
     ctx.restore();
 }
 
-function gameLoop() {
-    update(); draw();
-    if (gameActive && !isPaused) requestAnimationFrame(gameLoop);
+function gameLoop(loopId) {
+    if (loopId !== gameLoopId) return; // a newer startGame() has taken over — stop this stale chain
+    update();
+    draw();
+    if (gameActive && !isPaused) requestAnimationFrame(() => gameLoop(loopId));
 }
 
 async function logActivity(action) {
@@ -321,18 +397,28 @@ async function logActivity(action) {
     const pName = typeof playerName !== 'undefined' && playerName ? playerName : "Pilot";
     const currentScore = typeof score !== 'undefined' ? score : 0;
     const formBody = `player=${encodeURIComponent(pName)}&action=${encodeURIComponent(action)}&score=${encodeURIComponent(currentScore)}`;
-    fetch(url, { method:"POST", mode:"cors", headers:{"Content-Type":"application/x-www-form-urlencoded"}, body:formBody }).catch(()=>{});
+    fetch(url, {
+        method: "POST", mode: "cors",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: formBody
+    }).catch(() => {});
 }
+
 
 // =============================================================================
 //   SURVIVAL MODE
 // =============================================================================
 
 let survivalActive = false;
-let survivalInventoryOpen = false;
 const sKeys = { left: false, right: false, up: false, down: false, space: false };
 
-let sPlayer = { x: 0, y: 0, w: 52, h: 52, speed: 6, lives: 3, invincTimer: 0 };
+let sPlayer = {
+    x: 0, y: 0,
+    w: 52, h: 52,
+    speed: 6,
+    lives: 3,
+    invincTimer: 0,
+};
 
 let sBullets    = [];
 let sEnemies    = [];
@@ -346,19 +432,45 @@ let sCoins      = 0;
 let sWave       = 1;
 let sKills      = 0;
 let sBossActive = false;
-const KILLS_PER_BOSS  = 10;
-const WAVE_DROPS_STOP = 3;
+let sWaveAdvancing = false; // guards the wave-clear block in survivalUpdate() from re-firing every frame
+let sWaveId     = 0;   // incremented each wave; stale setTimeout callbacks check this and bail
 
-// --- COMBO SYSTEM ---
-// Kill 5 enemies in a row without any escaping = +5 coins
-// Enemy escaping just resets the combo — NO life lost
-let sCombo        = 0;
-const COMBO_GOAL  = 5;
-const COMBO_COINS = 5;
-let comboDisplay  = { text: '', timer: 0, x: 0, y: 0, color: '#ffaa00' };
+// --- Combo / multiplier system ---
+// Killing enemies without taking damage builds a streak. The multiplier
+// steps up at fixed streak thresholds and resets the instant the player
+// takes a hit (see survivalTakeDamage()). This rewards careful, sustained
+// play over button-mashing, on top of the raw per-wave difficulty.
+let sComboStreak = 0;
+let sComboMult   = 1;
+const COMBO_THRESHOLDS = [
+    { streak: 0,  mult: 1   },
+    { streak: 8,  mult: 1.5 },
+    { streak: 18, mult: 2   },
+    { streak: 32, mult: 3   },
+];
 
-let puSlots    = [null, null, null, null];
-let puUnlocked = [];
+// --- Session high scores (in-memory, resets on page reload) ---
+// Not persisted to disk/server — purely a "best of this browser session"
+// comparison shown on the survival game-over screen.
+let sSessionBestScore = 0;
+let sSessionBestWave  = 1;
+
+// --- Toast notifications ---
+// Small on-screen messages for milestones (boss kills, wave clears, combo
+// tier-ups). Purely cosmetic feedback layered on top of the canvas.
+let sToasts = [];
+
+// Same loop-ownership guard as gameLoopId above, but for survival mode's
+// requestAnimationFrame chain. startSurvival() mints a new id; survivalLoop()
+// checks it every frame and stops itself if a newer run has taken over.
+let survivalLoopId = 0;
+const KILLS_PER_BOSS = 20;
+
+// Tracks which power-up types the player has discovered (for inventory shop)
+let sDiscoveredPowerUps = new Set();
+
+// 4 inventory slots
+let puSlots = [null, null, null, null];
 
 let puEffects = {
     rapidFire:  { active: false, timer: 0 },
@@ -367,6 +479,9 @@ let puEffects = {
     tripleShot: { active: false, timer: 0 },
     bombBlast:  { active: false, timer: 0 },
     timeSlow:   { active: false, timer: 0 },
+    homing:     { active: false, timer: 0 },
+    scoreBoost: { active: false, timer: 0 },
+    extraLife:  { active: false, timer: 0 }, // instant-use, never lingers as "active"
 };
 
 let sLastShot = 0;
@@ -383,170 +498,106 @@ for (let i = 0; i < 140; i++) {
     });
 }
 
+// Power-up definitions — cost is coin cost to buy from inventory shop
 const POWER_UP_DEFS = [
     { type:'rapidFire',  icon:'⚡', label:'RAPID FIRE', cost:5,  color:'#ffff00', duration:8000  },
     { type:'shield',     icon:'🛡', label:'SHIELD',     cost:6,  color:'#00f2ff', duration:0     },
-    { type:'laserBeam',  icon:'🔴', label:'LASER',      cost:8,  color:'#ff0044', duration:5000  },
+    { type:'laserBeam',  icon:'🔴', label:'LASER',      cost:7,  color:'#ff0044', duration:5000  },
     { type:'tripleShot', icon:'🔱', label:'TRIPLE',     cost:5,  color:'#bc13fe', duration:7000  },
-    { type:'bombBlast',  icon:'💥', label:'BOMB',       cost:7,  color:'#ff8800', duration:0     },
-    { type:'timeSlow',   icon:'⏱', label:'SLOW-MO',    cost:6,  color:'#00ffaa', duration:6000  },
+    { type:'bombBlast',  icon:'💥', label:'BOMB',       cost:6,  color:'#ff8800', duration:0     },
+    { type:'timeSlow',   icon:'⏱', label:'SLOW-MO',    cost:5,  color:'#00ffaa', duration:6000  },
+    { type:'homing',     icon:'🎯', label:'HOMING',     cost:8,  color:'#66ff66', duration:9000  },
+    { type:'scoreBoost', icon:'✨', label:'2X SCORE',   cost:7,  color:'#ffd700', duration:10000 },
+    { type:'extraLife',  icon:'❤️', label:'EXTRA LIFE', cost:10, color:'#ff3366', duration:0     },
 ];
 
-// --- Build Survival Pause Menu ---
-(function buildSurvivalPauseMenu() {
-    if (document.getElementById('survivalPauseMenu')) return;
-    const div = document.createElement('div');
-    div.id = 'survivalPauseMenu';
-    div.className = 'menu-overlay';
-    div.style.display = 'none';
-    div.innerHTML = `
-        <div class="terminal-box" style="border-color:#ffaa00;box-shadow:0 0 40px #ffaa00;min-width:340px;">
-            <h1 style="color:#ffaa00;">⚡ PAUSED</h1>
-            <button class="btn" style="background:#ffaa00;color:#000;" onclick="togglePause()">RESUME</button>
-            <button class="btn" style="background:#bc13fe;color:#fff;" onclick="openSurvivalInventory()">📦 INVENTORY</button>
-            <button class="btn" onclick="backToMenu()">QUIT</button>
-        </div>
-    `;
-    document.body.appendChild(div);
-})();
-
-// --- Build Inventory Overlay ---
-(function buildInventoryOverlay() {
-    if (document.getElementById('survivalInventoryOverlay')) return;
-    const div = document.createElement('div');
-    div.id = 'survivalInventoryOverlay';
-    div.className = 'menu-overlay';
-    div.style.display = 'none';
-    div.style.zIndex = '2000';
-    div.innerHTML = `
-        <div class="terminal-box" style="border-color:#bc13fe;box-shadow:0 0 40px #bc13fe;
-             min-width:480px;max-width:560px;max-height:85vh;overflow-y:auto;">
-            <h2 style="color:#bc13fe;letter-spacing:3px;">📦 INVENTORY</h2>
-            <div style="display:flex;justify-content:center;gap:30px;margin:10px 0 18px;">
-                <div style="text-align:center;">
-                    <span style="font-size:0.55rem;color:#ffaa0099;letter-spacing:3px;display:block;">COINS</span>
-                    <span id="invCoinsDisplay" style="font-size:1.6rem;color:#ffaa00;font-weight:bold;">0</span>
-                </div>
-                <div style="text-align:center;">
-                    <span style="font-size:0.55rem;color:#ffaa0099;letter-spacing:3px;display:block;">WAVE</span>
-                    <span id="invWaveDisplay" style="font-size:1.6rem;color:#ffffff;font-weight:bold;">1</span>
-                </div>
-                <div style="text-align:center;">
-                    <span style="font-size:0.55rem;color:#ffaa0099;letter-spacing:3px;display:block;">COMBO</span>
-                    <span id="invComboDisplay" style="font-size:1.6rem;color:#ffaa00;font-weight:bold;">0/5</span>
-                </div>
-            </div>
-            <p style="color:#ff004488;font-size:0.65rem;letter-spacing:2px;margin-bottom:14px;">
-                ACTIVE SLOTS — press 1–4 in game to activate
-            </p>
-            <div id="invActiveSlots" style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-bottom:20px;"></div>
-            <hr style="border-color:#333;margin:14px 0;">
-            <p style="color:#bc13fe88;font-size:0.65rem;letter-spacing:2px;margin-bottom:10px;">
-                BUY POWER-UPS — spend coins to add to active slots
-            </p>
-            <div id="invShopGrid" style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-bottom:20px;"></div>
-            <hr style="border-color:#333;margin:14px 0;">
-            <p style="color:#ffaa0066;font-size:0.6rem;letter-spacing:2px;">
-                💡 COMBO: Kill 5 in a row without any escaping = +5 coins. Missing just resets the streak.
-            </p>
-            <button class="btn" style="background:#bc13fe;color:#fff;margin-top:12px;" onclick="closeSurvivalInventory()">CLOSE</button>
-        </div>
-    `;
-    document.body.appendChild(div);
-})();
-
+// =============================================================================
+// SURVIVAL — INVENTORY SHOP (shown from pause menu)
+// =============================================================================
 function openSurvivalInventory() {
-    survivalInventoryOpen = true;
-    document.getElementById('survivalPauseMenu').style.display = 'none';
-    renderInventoryOverlay();
-    document.getElementById('survivalInventoryOverlay').style.display = 'flex';
+    renderInventoryShop();
+    document.getElementById('survivalInventory').style.display = 'flex';
 }
 
 function closeSurvivalInventory() {
-    survivalInventoryOpen = false;
-    document.getElementById('survivalInventoryOverlay').style.display = 'none';
-    document.getElementById('survivalPauseMenu').style.display = 'flex';
+    document.getElementById('survivalInventory').style.display = 'none';
 }
 
-function renderInventoryOverlay() {
-    document.getElementById('invCoinsDisplay').innerText = sCoins;
-    document.getElementById('invWaveDisplay').innerText  = sWave;
-    document.getElementById('invComboDisplay').innerText = `${sCombo}/${COMBO_GOAL}`;
+function renderInventoryShop() {
+    const grid = document.getElementById('inventoryGrid');
+    grid.innerHTML = '';
 
-    const slotsEl = document.getElementById('invActiveSlots');
-    slotsEl.innerHTML = '';
-    for (let i = 0; i < 4; i++) {
-        const pu = puSlots[i];
-        const cell = document.createElement('div');
-        cell.style.cssText = `
-            width:90px;height:90px;border:2px solid ${pu ? pu.color : '#333'};
-            border-radius:8px;background:rgba(0,0,0,0.9);display:flex;
-            flex-direction:column;align-items:center;justify-content:center;
-            cursor:${pu ? 'pointer' : 'default'};font-family:'Courier New',monospace;
-            box-shadow:${pu ? `0 0 12px ${pu.color}55` : 'none'};
-        `;
-        if (pu) {
-            cell.innerHTML = `
-                <span style="font-size:1.8rem;">${pu.icon}</span>
-                <span style="font-size:0.5rem;color:${pu.color};letter-spacing:1px;margin-top:4px;">${pu.label}</span>
-                <span style="font-size:0.45rem;color:#888;margin-top:2px;">SLOT ${i+1} · press ${i+1}</span>
-            `;
-            cell.onclick = () => { usePowerUp(i); renderInventoryOverlay(); };
-        } else {
-            cell.innerHTML = `<span style="font-size:0.65rem;color:#333;">[EMPTY ${i+1}]</span>`;
-        }
-        slotsEl.appendChild(cell);
-    }
-
-    const shopEl = document.getElementById('invShopGrid');
-    shopEl.innerHTML = '';
     POWER_UP_DEFS.forEach(def => {
         const canAfford = sCoins >= def.cost;
-        const cell = document.createElement('div');
-        cell.style.cssText = `
-            width:110px;padding:12px 8px;border:2px solid ${canAfford ? def.color : '#333'};
-            border-radius:8px;background:rgba(0,0,0,0.9);display:flex;
-            flex-direction:column;align-items:center;justify-content:center;
-            cursor:${canAfford ? 'pointer' : 'not-allowed'};
-            font-family:'Courier New',monospace;text-align:center;
-            opacity:${canAfford ? '1' : '0.45'};
-            box-shadow:${canAfford ? `0 0 12px ${def.color}44` : 'none'};transition:0.15s;
+        const card = document.createElement('div');
+        card.style.cssText = `
+            width: 110px; padding: 14px 8px; border: 2px solid ${canAfford ? def.color : '#333'};
+            border-radius: 10px; background: rgba(0,0,0,0.9);
+            display: flex; flex-direction: column; align-items: center; gap: 6px;
+            cursor: ${canAfford ? 'pointer' : 'not-allowed'};
+            opacity: ${canAfford ? '1' : '0.4'};
+            box-shadow: ${canAfford ? `0 0 14px ${def.color}66` : 'none'};
+            transition: 0.15s; font-family: 'Courier New', monospace;
+            text-align: center;
         `;
-        cell.innerHTML = `
-            <span style="font-size:1.8rem;">${def.icon}</span>
-            <span style="font-size:0.5rem;color:${def.color};letter-spacing:1px;margin-top:5px;">${def.label}</span>
-            <span style="font-size:0.6rem;color:${canAfford ? '#ffaa00' : '#ff4444'};margin-top:4px;font-weight:bold;">${def.cost} 🪙</span>
+        card.innerHTML = `
+            <span style="font-size:2rem;">${def.icon}</span>
+            <span style="font-size:0.6rem; color:${def.color}; letter-spacing:2px;">${def.label}</span>
+            <span style="font-size:0.7rem; color:#ffaa00;">${def.cost} 🪙</span>
+            <span style="font-size:0.5rem; color:${canAfford ? '#00f2ff' : '#ff0044'};">
+                ${canAfford ? 'AVAILABLE' : 'NEED MORE COINS'}
+            </span>
         `;
         if (canAfford) {
-            cell.onclick = () => {
-                if (sCoins < def.cost) return;
-                sCoins -= def.cost;
-                addToInventory({ ...def, firstUse: false });
-                updateSurvivalHUD();
-                renderInventoryOverlay();
-                logActivity(`POWER-UP BOUGHT: ${def.label}`);
-            };
+            card.onclick = () => buyFromInventory(def.type);
+            card.onmouseenter = () => card.style.transform = 'scale(1.06)';
+            card.onmouseleave = () => card.style.transform = 'scale(1)';
         }
-        shopEl.appendChild(cell);
+        grid.appendChild(card);
     });
 }
 
+function buyFromInventory(type) {
+    const def = POWER_UP_DEFS.find(d => d.type === type);
+    if (!def || sCoins < def.cost) return;
+
+    // Check if there's room in slots
+    const emptySlot = puSlots.findIndex(s => s === null);
+    if (emptySlot === -1) {
+        // Flash the inventory to signal full — replace slot 0 as fallback
+        puSlots[0] = { ...def, firstUse: true };
+    } else {
+        puSlots[emptySlot] = { ...def, firstUse: true };
+    }
+
+    sCoins -= def.cost;
+    sDiscoveredPowerUps.add(type);
+    updateSurvivalHUD();
+    renderPowerUpBar();
+    renderInventoryShop(); // refresh affordability
+    logActivity(`INVENTORY PURCHASE: ${def.label}`);
+}
+
+// =============================================================================
+// SURVIVAL — START
+// =============================================================================
 function startSurvival() {
     shipImg.src = selectedShipSrc;
-    document.getElementById('shipMenu').style.display                    = 'none';
-    document.getElementById('gameOverScreen').style.display              = 'none';
-    document.getElementById('survivalOverScreen').style.display          = 'none';
-    document.getElementById('survivalPauseMenu').style.display           = 'none';
-    document.getElementById('survivalInventoryOverlay').style.display    = 'none';
-    document.querySelector('.ui-layer').style.display                    = 'none';
-    document.getElementById('survivalHUD').style.display                 = 'flex';
-    document.getElementById('powerupBar').style.display                  = 'flex';
-    document.getElementById('powerupBar-label').style.display            = 'block';
 
-    survivalActive        = true;
-    gameActive            = false;
-    isPaused              = false;
-    survivalInventoryOpen = false;
+    document.getElementById('shipMenu').style.display          = 'none';
+    document.getElementById('gameOverScreen').style.display    = 'none';
+    document.getElementById('survivalOverScreen').style.display = 'none';
+    document.querySelector('.ui-layer').style.display          = 'none';
+    document.getElementById('survivalPauseMenu').style.display = 'none';
+    document.getElementById('survivalInventory').style.display = 'none';
+
+    document.getElementById('survivalHUD').style.display       = 'flex';
+    document.getElementById('powerupBar').style.display        = 'flex';
+    document.getElementById('powerupBar-label').style.display  = 'block';
+
+    survivalActive = true;
+    gameActive     = false;
+    isPaused       = false;
 
     sPlayer.x = canvas.width / 2;
     sPlayer.y = canvas.height - 100;
@@ -554,71 +605,199 @@ function startSurvival() {
     sPlayer.invincTimer = 0;
 
     sBullets = []; sEnemies = []; sEBullets = [];
-    sPowerDrops = []; sCoinDrops = []; sParticles = [];
+    sPowerDrops = []; sCoinDrops = []; sParticles = []; sToasts = [];
 
     sScore = 0; sCoins = 0; sWave = 1; sKills = 0;
-    sBossActive = false;
-    sLastShot   = Date.now();
-    sCombo      = 0;
-    comboDisplay = { text: '', timer: 0, x: 0, y: 0, color: '#ffaa00' };
+    sBossActive = false; sWaveId = 0; sWaveAdvancing = false;
+    sComboStreak = 0; sComboMult = 1;
+    sLastShot = Date.now();
+    sDiscoveredPowerUps = new Set();
 
-    puSlots    = [null, null, null, null];
-    puUnlocked = [];
+    puSlots = [null, null, null, null];
     Object.keys(puEffects).forEach(k => { puEffects[k].active = false; puEffects[k].timer = 0; });
+
     sStars.forEach(s => { s.x = Math.random() * canvas.width; s.y = Math.random() * canvas.height; });
 
     updateSurvivalHUD();
     renderPowerUpBar();
     spawnSurvivalWave();
+
     logActivity(`SURVIVAL START: ${playerName}`);
-    requestAnimationFrame(survivalLoop);
+    const myLoopId = ++survivalLoopId; // invalidate any previously running survivalLoop chain
+    requestAnimationFrame(() => survivalLoop(myLoopId));
+}
+
+// =============================================================================
+// SURVIVAL — WAVE SPAWNING
+// Endless "high score" growth — no cap, no finish line.
+// Base enemy count grows wave over wave, but the AMOUNT it grows by shrinks
+// every wave, settling toward a floor of +1 per wave forever (never flat).
+// Target feel: wave1 ~5-10, wave2 ~10-15, wave3 ~15-17, then small bumps on.
+// =============================================================================
+function getWaveEnemyCount(wave) {
+    // Cumulative base count via a shrinking per-wave increment.
+    // increment(w) shrinks roughly like 9/w, floored at 1 — so early waves
+    // jump a lot (wave1->2, wave2->3) and later waves creep up by ~1-2,
+    // settling toward +1/wave forever as the wave number grows.
+    let base = 7; // wave 1 starting point (mid of 5-10)
+    for (let w = 2; w <= wave; w++) {
+        const increment = Math.max(1, Math.round(9 / w));
+        base += increment;
+    }
+    // Small random spread layered on top so each wave isn't a fixed number
+    // (matches the "5 to 10", "10 to 15", "15 to 17" feel).
+    const spread = wave === 1 ? 2 : 1;
+    const count = base + Math.floor(Math.random() * (spread * 2 + 1)) - spread;
+    return Math.max(1, count);
 }
 
 function spawnSurvivalWave() {
-    const count = sWave <= 2 ? 3 : sWave <= 4 ? 4 : 5;
+    const count = getWaveEnemyCount(sWave);
+    const myWaveId = ++sWaveId; // snapshot — callbacks from old waves will have a stale id and bail
     for (let i = 0; i < count; i++) {
-        setTimeout(() => { if (!survivalActive) return; spawnSurvivalEnemy(false); }, i * 1100);
+        setTimeout(() => {
+            if (!survivalActive || sWaveId !== myWaveId) return; // stale — ignore
+            spawnSurvivalEnemy(false);
+        }, i * 1400);
     }
 }
 
-function spawnSurvivalEnemy(isBoss) {
-    const w = isBoss ? 84 : 36;
-    const h = isBoss ? 84 : 36;
-    const x = Math.random() * (canvas.width - w * 2) + w;
-    const baseSpd = isBoss ? 0.7 + sWave * 0.05 : 1.1 + sWave * 0.12;
-    const spd     = puEffects.timeSlow.active ? baseSpd * 0.45 : baseSpd;
-    const hp      = isBoss ? 14 + sWave * 3 : sWave >= 9 ? 3 : sWave >= 5 ? 2 : 1;
-    const baseInterval = isBoss
-        ? Math.max(1800, 3200 - sWave * 120)
-        : Math.max(2800, 5000 - sWave * 200);
-    const zigzag = !isBoss && sWave >= 8;
-    sEnemies.push({
-        x, y: -h / 2 - 10, w, h,
-        speed: spd, baseSpeed: baseSpd,
-        isBoss, hp, maxHp: hp, rot: 0,
-        lastShot: Date.now() + Math.random() * 2500,
-        shootInterval: baseInterval + Math.random() * 1500,
-        color: hp >= 3 ? '#ff8800' : (isBoss ? '#bc13fe' : '#ff0044'),
-        pulseT: 0, zigzag,
-        zigzagPhase: Math.random() * Math.PI * 2,
-        zigzagAmp: 1.8 + Math.random() * 1.2,
-    });
+// =============================================================================
+// SURVIVAL — ENEMY TYPES
+// Beyond the base grunt and boss, three new enemy types add tactical variety
+// without relying on raw numbers:
+//   diver    — flies straight down fast, then locks onto the player and
+//              dashes toward them once it crosses a trigger height.
+//   splitter — slow and tanky-looking, but splits into two fast minis on
+//              death (the minis cannot split again).
+//   shielded — has a rotating energy shield that must be wholly depleted
+//              before its body HP can be damaged; shield regenerates if
+//              left alone for a few seconds.
+// Unlock waves keep the early game simple and introduce one new type at a
+// time so players can learn each threat before the next appears.
+// =============================================================================
+const ENEMY_TYPE_UNLOCK_WAVE = {
+    diver:    2,
+    splitter: 3,
+    shielded: 4,
+};
+
+function pickSurvivalEnemyType(wave) {
+    const pool = ['grunt'];
+    if (wave >= ENEMY_TYPE_UNLOCK_WAVE.diver)    pool.push('diver', 'diver');
+    if (wave >= ENEMY_TYPE_UNLOCK_WAVE.splitter) pool.push('splitter');
+    if (wave >= ENEMY_TYPE_UNLOCK_WAVE.shielded) pool.push('shielded');
+    return pool[Math.floor(Math.random() * pool.length)];
 }
 
+// =============================================================================
+// SURVIVAL — ENEMY SPAWN
+// HP scales with wave. Zigzag amplitude/speed increases with wave.
+// =============================================================================
+function spawnSurvivalEnemy(isBoss, forcedType) {
+    const enemyType = isBoss ? 'boss' : (forcedType || pickSurvivalEnemyType(sWave));
+
+    const sizeByType = {
+        grunt: 36, diver: 32, splitter: 44, shielded: 40, boss: 84, mini: 22,
+    };
+    const w = sizeByType[enemyType] || 36;
+    const h = w;
+    const x = Math.random() * (canvas.width - w * 2) + w;
+
+    // Fall speed — slowed down overall, and grows more gently per wave.
+    // Divers fall faster than grunts to sell their "incoming threat" read.
+    const speedMultByType = { grunt: 1, diver: 1.35, splitter: 0.75, shielded: 0.85, boss: 1, mini: 1.5 };
+    const baseSpd = (isBoss ? 0.6 : 0.85 + sWave * 0.10) * (speedMultByType[enemyType] || 1);
+    const spd     = puEffects.timeSlow.active ? baseSpd * 0.45 : baseSpd;
+
+    // HP: bosses scale strongly; regulars get more HP from wave 3+.
+    // Splitters and shielded enemies get a flat HP bonus to justify their
+    // higher threat level; minis (split children) are always 1 HP.
+    let hp;
+    if (isBoss) hp = 18 + sWave * 4;
+    else if (enemyType === 'mini') hp = 1;
+    else {
+        const base = Math.max(1, Math.floor(1 + (sWave - 1) * 0.6));
+        const bonusByType = { splitter: 2, shielded: 1 };
+        hp = base + (bonusByType[enemyType] || 0);
+    }
+
+    // Zigzag: unlocks from wave 2, amplitude AND speed grow each wave, but
+    // both are slowed down overall so the weave reads as a wobble, not a dart.
+    // Divers and minis don't zigzag — their straight-line dash is the threat.
+    const zigzagCapable = !isBoss && enemyType !== 'diver' && enemyType !== 'mini';
+    const zigzagAmplitude = zigzagCapable ? Math.max(0, (sWave - 1) * 0.25) : 0;
+    const zigzagSpeed     = zigzagCapable ? 0.022 + (sWave - 1) * 0.007 + Math.random() * 0.012 : 0;
+
+    const colorByType = {
+        grunt: '#ff0044', diver: '#ff6a00', splitter: '#ff00aa',
+        shielded: '#00c8ff', boss: '#bc13fe', mini: '#ff4488',
+    };
+
+    const enemy = {
+        x, y: -h / 2 - 10,
+        w, h,
+        speed: spd,
+        baseSpeed: baseSpd,
+        isBoss,
+        enemyType,
+        hp, maxHp: hp,
+        rot: 0,
+        lastShot: Date.now() + Math.random() * 3000,
+        shootInterval: isBoss ? 2200 : 3500 + Math.random() * 2500,
+        color: colorByType[enemyType] || '#ff0044',
+        pulseT: 0,
+        // Zigzag state
+        zigzagAmplitude,
+        zigzagSpeed,
+        zigzagT: Math.random() * Math.PI * 2, // random phase offset
+        baseX: x, // anchor x for zigzag calculation
+    };
+
+    // --- Diver-specific state ---
+    if (enemyType === 'diver') {
+        enemy.diverState = 'falling';       // falling -> locked -> dashing
+        enemy.diverTriggerY = canvas.height * (0.35 + Math.random() * 0.15);
+        enemy.dashVx = 0;
+        enemy.dashVy = 0;
+    }
+
+    // --- Shielded-specific state ---
+    if (enemyType === 'shielded') {
+        enemy.shieldHp = 3 + Math.floor(sWave * 0.4);
+        enemy.shieldMaxHp = enemy.shieldHp;
+        enemy.shieldRot = 0;
+        enemy.shieldRegenAt = 0; // timestamp; if hit, shield regens after a delay if untouched
+        enemy.shieldBroken = false;
+    }
+
+    sEnemies.push(enemy);
+    return enemy;
+}
+
+// =============================================================================
+// SURVIVAL — SHOOTING
+// =============================================================================
 function survivalShoot() {
     const now   = Date.now();
     const delay = puEffects.rapidFire.active ? S_SHOOT_DELAY * 0.38 : S_SHOOT_DELAY;
     if (now - sLastShot < delay) return;
     sLastShot = now;
+
     if (puEffects.laserBeam.active) { triggerLaser(); return; }
+
     const angles = puEffects.tripleShot.active ? [-20, 0, 20] : [0];
     angles.forEach(deg => {
         const rad = deg * Math.PI / 180;
         sBullets.push({
             x: sPlayer.x + Math.sin(rad) * 10,
             y: sPlayer.y - sPlayer.h / 2,
-            vx: Math.sin(rad) * 7, vy: -14,
-            r: 4, color: '#00f2ff', trail: [],
+            vx: Math.sin(rad) * 7,
+            vy: -14,
+            r: 4,
+            color: puEffects.homing.active ? '#66ff66' : '#00f2ff',
+            trail: [],
+            homing: puEffects.homing.active,
         });
     });
 }
@@ -627,103 +806,154 @@ function triggerLaser() {
     for (let i = sEnemies.length - 1; i >= 0; i--) {
         const en = sEnemies[i];
         if (Math.abs(en.x - sPlayer.x) < en.w / 2 + 35) {
-            en.hp = 0; killSurvivalEnemy(i);
+            if (en.shieldHp) en.shieldHp = 0; // laser punches straight through shields
+            en.hp = 0;
+            killSurvivalEnemy(i);
         }
     }
     sBullets.push({ type: 'laser', x: sPlayer.x, life: 1 });
 }
 
-// --- COMBO HELPERS ---
-function onKillCombo(ex, ey) {
-    sCombo++;
-    if (sCombo >= COMBO_GOAL) {
-        sCoins += COMBO_COINS;
-        comboDisplay = {
-            text: `🔥 ${sCombo}x COMBO! +${COMBO_COINS} COINS`,
-            timer: 130, x: canvas.width / 2, y: canvas.height / 2 - 80, color: '#ffaa00',
-        };
-        sCombo = 0;
-        updateSurvivalHUD();
-        logActivity(`COMBO REWARD: +${COMBO_COINS} COINS`);
-    } else {
-        comboDisplay = {
-            text: `${sCombo}x COMBO`,
-            timer: 60, x: ex, y: ey - 30,
-            color: sCombo >= 3 ? '#ffdd00' : '#ffaa00',
-        };
-    }
-}
-
-function breakCombo() {
-    if (sCombo > 0) {
-        comboDisplay = {
-            text: 'COMBO BROKEN', timer: 70,
-            x: canvas.width / 2, y: canvas.height / 2 - 50, color: '#ff4444',
-        };
-        sCombo = 0;
-    }
-}
-
+// =============================================================================
+// SURVIVAL — UPDATE
+// =============================================================================
 function survivalUpdate() {
     if (!survivalActive || isPaused) return;
 
-    if (sKeys.left  && sPlayer.x - sPlayer.w / 2 > 0)                  sPlayer.x -= sPlayer.speed;
-    if (sKeys.right && sPlayer.x + sPlayer.w / 2 < canvas.width)        sPlayer.x += sPlayer.speed;
-    if (sKeys.up    && sPlayer.y - sPlayer.h / 2 > 70)                  sPlayer.y -= sPlayer.speed;
-    if (sKeys.down  && sPlayer.y + sPlayer.h / 2 < canvas.height - 90)  sPlayer.y += sPlayer.speed;
+    if (sKeys.left  && sPlayer.x - sPlayer.w / 2 > 0)                 sPlayer.x -= sPlayer.speed;
+    if (sKeys.right && sPlayer.x + sPlayer.w / 2 < canvas.width)      sPlayer.x += sPlayer.speed;
+    if (sKeys.up    && sPlayer.y - sPlayer.h / 2 > 70)                sPlayer.y -= sPlayer.speed;
+    if (sKeys.down  && sPlayer.y + sPlayer.h / 2 < canvas.height - 90) sPlayer.y += sPlayer.speed;
 
     if (sKeys.space) survivalShoot();
+
     if (sPlayer.invincTimer > 0) sPlayer.invincTimer--;
 
     Object.keys(puEffects).forEach(k => {
         if (puEffects[k].active && puEffects[k].timer > 0) {
             puEffects[k].timer -= 16;
-            if (puEffects[k].timer <= 0) { puEffects[k].active = false; puEffects[k].timer = 0; }
+            if (puEffects[k].timer <= 0) {
+                puEffects[k].active = false;
+                puEffects[k].timer  = 0;
+            }
         }
     });
-    sEnemies.forEach(en => { en.speed = puEffects.timeSlow.active ? en.baseSpeed * 0.45 : en.baseSpeed; });
-    if (comboDisplay.timer > 0) comboDisplay.timer--;
 
-    // Player bullets
+    // ---- Player bullets ----
     for (let i = sBullets.length - 1; i >= 0; i--) {
         const b = sBullets[i];
         if (b.type === 'laser') { b.life -= 0.15; if (b.life <= 0) sBullets.splice(i, 1); continue; }
+
         b.trail.push({ x: b.x, y: b.y });
         if (b.trail.length > 8) b.trail.shift();
-        b.x += b.vx; b.y += b.vy;
-        if (b.y < -20) { sBullets.splice(i, 1); continue; }
+
+        // Homing bullets gently steer toward the nearest live enemy each
+        // frame rather than snapping to face it — keeps the curve readable
+        // instead of looking like teleportation.
+        if (b.homing && sEnemies.length > 0) {
+            let nearest = null, nearestDist = Infinity;
+            for (const en of sEnemies) {
+                const d = Math.hypot(en.x - b.x, en.y - b.y);
+                if (d < nearestDist) { nearestDist = d; nearest = en; }
+            }
+            if (nearest) {
+                const dx = nearest.x - b.x, dy = nearest.y - b.y;
+                const dist = Math.hypot(dx, dy) || 1;
+                const speed = Math.hypot(b.vx, b.vy);
+                const turnRate = 0.18; // 0 = no homing, 1 = instant snap
+                const targetVx = (dx / dist) * speed;
+                const targetVy = (dy / dist) * speed;
+                b.vx += (targetVx - b.vx) * turnRate;
+                b.vy += (targetVy - b.vy) * turnRate;
+            }
+        }
+
+        b.x += b.vx;
+        b.y += b.vy;
+
+        if (b.y < -20 || b.y > canvas.height + 20 || b.x < -20 || b.x > canvas.width + 20) {
+            sBullets.splice(i, 1); continue;
+        }
+
         let hit = false;
         for (let j = sEnemies.length - 1; j >= 0; j--) {
             const en = sEnemies[j];
             if (b.x > en.x - en.w/2 && b.x < en.x + en.w/2 &&
                 b.y > en.y - en.h/2 && b.y < en.y + en.h/2) {
-                en.hp--;
-                if (en.hp <= 0) killSurvivalEnemy(j);
-                hit = true; break;
+                applyDamageToEnemy(en, j, 1);
+                hit = true;
+                break;
             }
         }
         if (hit) sBullets.splice(i, 1);
     }
 
-    // Enemies
+    // ---- Enemies ----
     for (let i = sEnemies.length - 1; i >= 0; i--) {
         const en = sEnemies[i];
-        en.y     += en.speed;
+
+        // Apply timeSlow
+        en.speed = puEffects.timeSlow.active ? en.baseSpeed * 0.45 : en.baseSpeed;
+
+        if (en.enemyType === 'diver') {
+            // Diver state machine: fall straight down, then once past its
+            // trigger height, lock onto the player's current position and
+            // dash there in a straight line — a fast, readable threat that
+            // rewards repositioning rather than raw reflexes.
+            if (en.diverState === 'falling') {
+                en.y += en.speed;
+                if (en.y >= en.diverTriggerY) {
+                    en.diverState = 'dashing';
+                    const dx = sPlayer.x - en.x, dy = sPlayer.y - en.y;
+                    const dist = Math.hypot(dx, dy) || 1;
+                    const dashSpeed = en.speed * 3.2;
+                    en.dashVx = (dx / dist) * dashSpeed;
+                    en.dashVy = (dy / dist) * dashSpeed;
+                }
+            } else {
+                en.x += en.dashVx;
+                en.y += en.dashVy;
+            }
+        } else {
+            // Zigzag horizontal movement — sine wave offset on X
+            if (en.zigzagAmplitude > 0) {
+                en.zigzagT += en.zigzagSpeed;
+                en.x = en.baseX + Math.sin(en.zigzagT) * en.zigzagAmplitude * 60;
+                // Clamp to screen
+                en.x = Math.max(en.w / 2, Math.min(canvas.width - en.w / 2, en.x));
+            }
+            en.y += en.speed;
+        }
+
+        // Shield regen — if a shielded enemy hasn't been hit in a while,
+        // its shield slowly comes back online.
+        if (en.enemyType === 'shielded' && en.shieldBroken && en.shieldRegenAt &&
+            Date.now() > en.shieldRegenAt && en.shieldHp < en.shieldMaxHp) {
+            en.shieldHp = Math.min(en.shieldMaxHp, en.shieldHp + 0.02);
+            if (en.shieldHp >= en.shieldMaxHp) en.shieldBroken = false;
+        }
+        if (en.enemyType === 'shielded') en.shieldRot += 0.05;
+
         en.rot   += 0.025;
         en.pulseT = (en.pulseT || 0) + 0.08;
-        if (en.zigzag) {
-            en.zigzagPhase += 0.04;
-            en.x += Math.sin(en.zigzagPhase) * en.zigzagAmp;
-            en.x = Math.max(en.w, Math.min(canvas.width - en.w, en.x));
-        }
-        // Enemy escapes bottom — NO life lost, just break combo
-        if (en.y > canvas.height + en.h) {
+
+        // Dashing divers and minis that fly off any edge (not just bottom)
+        // should despawn without penalty — only a missed bottom-exit by a
+        // falling enemy counts as a hit the player failed to stop.
+        const offBottom = en.y > canvas.height + en.h;
+        const offSide   = en.x < -en.w * 2 || en.x > canvas.width + en.w * 2;
+        if (offBottom || (en.enemyType === 'diver' && en.diverState === 'dashing' && offSide)) {
             sEnemies.splice(i, 1);
-            if (!en.isBoss) breakCombo();
+            if (offBottom) survivalTakeDamage();
             continue;
         }
+
         const now = Date.now();
-        if (now - en.lastShot > en.shootInterval) { en.lastShot = now; fireEnemyBullet(en); }
+        if (now - en.lastShot > en.shootInterval && en.enemyType !== 'diver' && en.enemyType !== 'mini') {
+            en.lastShot = now;
+            fireEnemyBullet(en);
+        }
+
         if (sPlayer.invincTimer === 0 &&
             Math.abs(en.x - sPlayer.x) < (en.w + sPlayer.w) / 2 * 0.75 &&
             Math.abs(en.y - sPlayer.y) < (en.h + sPlayer.h) / 2 * 0.75) {
@@ -732,17 +962,21 @@ function survivalUpdate() {
             if (puEffects.shield.active) {
                 puEffects.shield.active = false;
                 createSurvivalParticles(sPlayer.x, sPlayer.y, '#00f2ff', false);
-            } else { breakCombo(); survivalTakeDamage(); }
+            } else {
+                survivalTakeDamage();
+            }
         }
     }
 
-    // Enemy bullets
+    // ---- Enemy bullets ----
     for (let i = sEBullets.length - 1; i >= 0; i--) {
         const b = sEBullets[i];
         b.x += b.vx; b.y += b.vy;
-        if (b.y > canvas.height + 10 || b.x < -10 || b.x > canvas.width + 10) {
+
+        if (b.y > canvas.height + 10 || b.y < -10 || b.x < -10 || b.x > canvas.width + 10) {
             sEBullets.splice(i, 1); continue;
         }
+
         if (sPlayer.invincTimer === 0 &&
             b.x > sPlayer.x - sPlayer.w / 2 && b.x < sPlayer.x + sPlayer.w / 2 &&
             b.y > sPlayer.y - sPlayer.h / 2 && b.y < sPlayer.y + sPlayer.h / 2) {
@@ -750,138 +984,327 @@ function survivalUpdate() {
             if (puEffects.shield.active) {
                 puEffects.shield.active = false;
                 createSurvivalParticles(sPlayer.x, sPlayer.y, '#00f2ff', false);
-            } else { breakCombo(); survivalTakeDamage(); }
+            } else {
+                survivalTakeDamage();
+            }
         }
     }
 
-    // Power-up drops (waves 1-3 only)
+    // ---- Power-up drops (only spawn on wave 3 or earlier) ----
     for (let i = sPowerDrops.length - 1; i >= 0; i--) {
         const d = sPowerDrops[i];
-        d.y += 1.6; d.rot = (d.rot || 0) + 0.04;
+        d.y   += 1.6;
+        d.rot  = (d.rot || 0) + 0.04;
         if (d.y > canvas.height + 30) { sPowerDrops.splice(i, 1); continue; }
         if (Math.abs(d.x - sPlayer.x) < 34 && Math.abs(d.y - sPlayer.y) < 34) {
-            addToInventory(d.pu); sPowerDrops.splice(i, 1);
+            sDiscoveredPowerUps.add(d.pu.type);
+            addToInventory(d.pu);
+            sPowerDrops.splice(i, 1);
         }
     }
 
-    // Coin drops
+    // ---- Coin drops ----
     for (let i = sCoinDrops.length - 1; i >= 0; i--) {
         const c = sCoinDrops[i];
-        c.y += 1.4; c.rot = (c.rot || 0) + 0.09;
+        c.y   += 1.4;
+        c.rot  = (c.rot || 0) + 0.09;
         if (c.y > canvas.height + 20) { sCoinDrops.splice(i, 1); continue; }
         if (Math.abs(c.x - sPlayer.x) < 30 && Math.abs(c.y - sPlayer.y) < 30) {
             sCoins++;
             sCoinDrops.splice(i, 1);
             createSurvivalParticles(c.x, c.y, '#ffaa00', false);
-            updateSurvivalHUD(); renderPowerUpBar();
+            updateSurvivalHUD();
+            renderPowerUpBar();
         }
     }
 
-    // Particles
+    // ---- Survival particles ----
     for (let i = sParticles.length - 1; i >= 0; i--) {
         const p = sParticles[i];
-        p.x += p.vx; p.y += p.vy; p.life -= 0.018;
+        p.x += p.vx; p.y += p.vy;
+        p.life -= 0.018;
         if (p.life <= 0) sParticles.splice(i, 1);
     }
 
-    sStars.forEach(s => { s.y += s.spd; if (s.y > canvas.height) { s.y = 0; s.x = Math.random() * canvas.width; } });
+    // ---- Scroll stars ----
+    sStars.forEach(s => {
+        s.y += s.spd;
+        if (s.y > canvas.height) { s.y = 0; s.x = Math.random() * canvas.width; }
+    });
+
     sScore += 0.025;
 
-    // Wave clear
-    if (!sBossActive && sEnemies.length === 0) {
-        sWave++; sKills = 0;
+    // Advance wave only when every enemy (including boss) is fully cleared.
+    // sWaveAdvancing guards against this block re-firing on every frame
+    // during the gap between clearing the wave and the next wave's first
+    // enemy actually spawning (without it, sWave would increment dozens of
+    // times per second for the whole 2.2s gap).
+    if (!sBossActive && sEnemies.length === 0 && !sWaveAdvancing) {
+        sWaveAdvancing = true;
+        showSurvivalToast(`WAVE ${sWave} CLEAR`, '#00f2ff');
+        sWave++;
+        sKills = 0;
+        sWaveId++; // invalidate any leftover spawn callbacks from the previous wave
         updateSurvivalHUD();
-        setTimeout(() => { if (survivalActive) spawnSurvivalWave(); }, 2200);
+        setTimeout(() => {
+            sWaveAdvancing = false;
+            if (survivalActive) spawnSurvivalWave();
+        }, 2200);
     }
+
     updateSurvivalHUD();
 }
 
+// =============================================================================
+// SURVIVAL — ENEMY BULLET FIRE
+// Boss attacks rotate through three distinct patterns so a boss fight has
+// some rhythm to learn instead of firing the same spread every time:
+//   spread — the original 3-bullet fan, aimed roughly downward
+//   circle — a full-ring burst (telegraphed by a brief pre-flash)
+//   volley — a tighter, faster burst aimed directly at the player
+// =============================================================================
 function fireEnemyBullet(en) {
-    const spd = en.isBoss ? 4.0 : 2.8 + sWave * 0.08;
+    const spd = en.isBoss ? 3.0 : 2.0; // slowed down, was 4.2 / 3.0
+
     if (en.isBoss) {
-        [-0.3, 0, 0.3].forEach(offset => {
-            sEBullets.push({
-                x: en.x, y: en.y + en.h / 2,
-                vx: offset * spd * 2.2 + (Math.random() - 0.5) * 0.4,
-                vy: spd, r: 6, color: '#ff00ff',
+        en.bossAttackIndex = ((en.bossAttackIndex || 0) + 1) % 3;
+        const pattern = ['spread', 'circle', 'volley'][en.bossAttackIndex];
+
+        if (pattern === 'spread') {
+            [-0.35, 0, 0.35].forEach(offset => {
+                sEBullets.push({
+                    x: en.x, y: en.y + en.h / 2,
+                    vx: offset * spd * 2 + (Math.random() - 0.5) * 0.5,
+                    vy: spd,
+                    r: 6, color: '#ff00ff',
+                });
             });
-        });
+        } else if (pattern === 'circle') {
+            const ringCount = 10;
+            for (let s = 0; s < ringCount; s++) {
+                const a = (s / ringCount) * Math.PI * 2;
+                sEBullets.push({
+                    x: en.x, y: en.y,
+                    vx: Math.cos(a) * spd * 0.85,
+                    vy: Math.sin(a) * spd * 0.85,
+                    r: 5, color: '#ff66ff',
+                });
+            }
+        } else { // volley — tighter, faster, aimed straight at the player
+            const dx = sPlayer.x - en.x, dy = sPlayer.y - en.y;
+            const dist = Math.hypot(dx, dy) || 1;
+            for (let s = -1; s <= 1; s++) {
+                sEBullets.push({
+                    x: en.x, y: en.y + en.h / 2,
+                    vx: (dx / dist) * spd * 1.4 + s * 0.6,
+                    vy: (dy / dist) * spd * 1.4,
+                    r: 5, color: '#ff0066',
+                });
+            }
+        }
     } else {
-        const spread = Math.max(1.2, 2.6 - sWave * 0.1);
+        const leanX = (sPlayer.x - en.x) / canvas.width * 1.5;
+        const jitter = (Math.random() - 0.5) * 2.8;
         sEBullets.push({
             x: en.x, y: en.y + en.h / 2,
-            vx: (Math.random() - 0.5) * spread * 2,
-            vy: spd, r: 4, color: '#ff6600',
+            vx: leanX + jitter,
+            vy: spd,
+            r: 4, color: '#ff6600',
         });
     }
 }
 
+// =============================================================================
+// SURVIVAL — COMBO / MULTIPLIER SYSTEM
+// =============================================================================
+function registerSurvivalKill() {
+    sComboStreak++;
+    const prevMult = sComboMult;
+    for (let i = COMBO_THRESHOLDS.length - 1; i >= 0; i--) {
+        if (sComboStreak >= COMBO_THRESHOLDS[i].streak) {
+            sComboMult = COMBO_THRESHOLDS[i].mult;
+            break;
+        }
+    }
+    if (sComboMult > prevMult) {
+        showSurvivalToast(`COMBO x${sComboMult}!`, '#ffaa00');
+    }
+    return sComboMult;
+}
+
+function resetSurvivalCombo() {
+    if (sComboStreak >= 8) showSurvivalToast('COMBO BROKEN', '#ff0044');
+    sComboStreak = 0;
+    sComboMult   = 1;
+}
+
+// =============================================================================
+// SURVIVAL — TOAST NOTIFICATIONS
+// Small fading messages stacked at the top-center of the screen. Each toast
+// tracks its own life (1.0 -> 0) so survivalDraw() can fade and rise it.
+// =============================================================================
+function showSurvivalToast(text, color) {
+    sToasts.push({ text, color, life: 1.0, y: 0 });
+    if (sToasts.length > 4) sToasts.shift(); // don't let the stack grow unbounded
+}
+
+// =============================================================================
+// SURVIVAL — DAMAGE APPLICATION
+// Routes incoming damage through an enemy's shield (if any) before it can
+// touch body HP. Shielded enemies must have their shield fully depleted
+// first; any hit that connects also resets the shield's regen timer.
+// =============================================================================
+function applyDamageToEnemy(en, idx, amount) {
+    if (en.shieldHp && en.shieldHp > 0) {
+        en.shieldHp -= amount;
+        en.shieldRegenAt = Date.now() + 4000; // 4s of no hits before it starts regenerating
+        if (en.shieldHp <= 0) {
+            en.shieldHp = 0;
+            en.shieldBroken = true;
+            createSurvivalParticles(en.x, en.y, '#00c8ff', false);
+        }
+        return; // damage absorbed by shield this hit, body HP untouched
+    }
+    en.hp -= amount;
+    if (en.hp <= 0) killSurvivalEnemy(idx);
+}
+
+// =============================================================================
+// SURVIVAL — KILL ENEMY
+// =============================================================================
 function killSurvivalEnemy(idx) {
     const en = sEnemies[idx];
     createSurvivalParticles(en.x, en.y, en.color, en.isBoss);
-    sScore += en.isBoss ? 500 : 100;
+
+    // Combo multiplier — see registerSurvivalKill() for the streak logic.
+    const comboMult = registerSurvivalKill();
+    const boostMult = puEffects.scoreBoost.active ? 2 : 1;
+    const baseScore = en.isBoss ? 500 : (en.enemyType === 'mini' ? 40 : 100);
+    sScore += Math.round(baseScore * comboMult * boostMult);
     sKills++;
+
     if (en.isBoss) {
-        // Exactly 1 coin per boss
+        // Boss always drops exactly 1 coin
         sCoinDrops.push({ x: en.x, y: en.y, rot: 0 });
-        if (sWave <= WAVE_DROPS_STOP) dropPowerUp(en.x, en.y);
-        sBossActive = false; shakeAmt = 18;
+
+        // No power-up drop from boss — coins are the reward
+        sBossActive = false;
+        shakeAmt = 18;
+        showSurvivalToast('BOSS DESTROYED', '#bc13fe');
         logActivity(`SURVIVAL BOSS KILLED - WAVE: ${sWave}`);
     } else {
-        if (sWave <= WAVE_DROPS_STOP && Math.random() < 0.40) dropPowerUp(en.x, en.y);
+        // Splitters spawn two fast minis on death (minis can't split again)
+        if (en.enemyType === 'splitter') {
+            for (let s = 0; s < 2; s++) {
+                const mini = spawnSurvivalEnemy(false, 'mini');
+                if (mini) {
+                    mini.x = en.x + (s === 0 ? -24 : 24);
+                    mini.y = en.y;
+                    mini.baseX = mini.x;
+                }
+            }
+        }
+
+        // Regular enemies: drop power-ups only on wave 3 or earlier
+        if (sWave <= 3 && Math.random() < 0.45) {
+            dropPowerUp(en.x, en.y);
+        }
+
         if (sKills > 0 && sKills % KILLS_PER_BOSS === 0 && !sBossActive) {
             sBossActive = true;
             setTimeout(() => { if (survivalActive) spawnSurvivalEnemy(true); }, 800);
             logActivity(`SURVIVAL BOSS INCOMING - WAVE: ${sWave}`);
         }
     }
-    onKillCombo(en.x, en.y);
+
     sEnemies.splice(idx, 1);
     updateSurvivalHUD();
 }
 
+// =============================================================================
+// SURVIVAL — POWER-UP DROP
+// =============================================================================
 function dropPowerUp(x, y) {
     const def = POWER_UP_DEFS[Math.floor(Math.random() * POWER_UP_DEFS.length)];
     sPowerDrops.push({ x, y, rot: 0, pu: { ...def, firstUse: true } });
 }
 
-// Lives only lost by actual hits — never by enemy escaping
+// =============================================================================
+// SURVIVAL — TAKE DAMAGE
+// =============================================================================
 function survivalTakeDamage() {
     if (sPlayer.invincTimer > 0) return;
     sPlayer.lives--;
     sPlayer.invincTimer = 110;
     shakeAmt = 14;
+    resetSurvivalCombo();
     createSurvivalParticles(sPlayer.x, sPlayer.y, '#ff0044', false);
     if (sPlayer.lives <= 0) endSurvival();
     else updateSurvivalHUD();
 }
 
+// =============================================================================
+// SURVIVAL — END
+// =============================================================================
 function endSurvival() {
     survivalActive = false;
-    document.getElementById('survivalHUD').style.display                 = 'none';
-    document.getElementById('powerupBar').style.display                  = 'none';
-    document.getElementById('powerupBar-label').style.display            = 'none';
-    document.getElementById('survivalPauseMenu').style.display           = 'none';
-    document.getElementById('survivalInventoryOverlay').style.display    = 'none';
-    document.getElementById('survFinalWave').innerText                   = sWave;
-    document.getElementById('survFinalScore').innerText                  = Math.floor(sScore);
-    document.getElementById('survivalOverScreen').style.display          = 'flex';
+
+    // Session high score tracking — best of this browser session only.
+    const isNewBestScore = Math.floor(sScore) > sSessionBestScore;
+    const isNewBestWave  = sWave > sSessionBestWave;
+    if (isNewBestScore) sSessionBestScore = Math.floor(sScore);
+    if (isNewBestWave)  sSessionBestWave  = sWave;
+
+    document.getElementById('survivalHUD').style.display      = 'none';
+    document.getElementById('powerupBar').style.display       = 'none';
+    document.getElementById('powerupBar-label').style.display = 'none';
+    document.getElementById('survivalPauseMenu').style.display = 'none';
+    document.getElementById('survivalInventory').style.display = 'none';
+    document.getElementById('survFinalWave').innerText  = sWave;
+    document.getElementById('survFinalScore').innerText = Math.floor(sScore);
+
+    const bestEl = document.getElementById('survSessionBest');
+    if (bestEl) {
+        bestEl.innerText = `SESSION BEST — WAVE ${sSessionBestWave} · SCORE ${sSessionBestScore}`;
+    }
+    const newBestEl = document.getElementById('survNewBestTag');
+    if (newBestEl) {
+        newBestEl.style.display = (isNewBestScore || isNewBestWave) ? 'block' : 'none';
+    }
+
+    document.getElementById('survivalOverScreen').style.display = 'flex';
     logActivity(`SURVIVAL END - WAVE: ${sWave} SCORE: ${Math.floor(sScore)}`);
 }
 
+// =============================================================================
+// SURVIVAL — POWER-UP INVENTORY SLOTS
+// =============================================================================
 function addToInventory(pu) {
     for (let i = 0; i < 4; i++) {
         if (!puSlots[i]) { puSlots[i] = { ...pu }; renderPowerUpBar(); return; }
     }
-    puSlots[0] = { ...pu }; renderPowerUpBar();
+    puSlots[0] = { ...pu };
+    renderPowerUpBar();
 }
 
 function usePowerUp(idx) {
     const pu = puSlots[idx];
     if (!pu) return;
+
+    if (!pu.firstUse) {
+        if (sCoins < pu.cost) return;
+        sCoins -= pu.cost;
+    }
+    pu.firstUse = false;
+
     activatePowerUp(pu);
-    puSlots[idx] = null;
-    renderPowerUpBar(); updateSurvivalHUD();
+
+    if (pu.type === 'bombBlast' || pu.type === 'shield' || pu.type === 'laserBeam' || pu.type === 'extraLife') {
+        puSlots[idx] = null;
+    }
+
+    renderPowerUpBar();
+    updateSurvivalHUD();
     logActivity(`POWER-UP USED: ${pu.label}`);
 }
 
@@ -893,246 +1316,385 @@ function activatePowerUp(pu) {
                 createSurvivalParticles(sEnemies[i].x, sEnemies[i].y, sEnemies[i].color, false);
                 sEnemies.splice(i, 1);
             } else {
+                sEnemies[i].shieldHp = 0; // bomb also punches through shields on bosses
                 sEnemies[i].hp -= 5;
                 if (sEnemies[i].hp <= 0) killSurvivalEnemy(i);
             }
         }
-        shakeAmt = 20; return;
+        shakeAmt = 20;
+        return;
     }
     if (pu.type === 'shield') { puEffects.shield.active = true; return; }
-    if (puEffects[pu.type]) { puEffects[pu.type].active = true; puEffects[pu.type].timer = pu.duration; }
+    if (pu.type === 'extraLife') {
+        sPlayer.lives++;
+        showSurvivalToast('+1 LIFE', '#ff3366');
+        createSurvivalParticles(sPlayer.x, sPlayer.y, '#ff3366', false);
+        return;
+    }
+    if (puEffects[pu.type]) {
+        puEffects[pu.type].active = true;
+        puEffects[pu.type].timer  = pu.duration;
+    }
 }
 
+// =============================================================================
+// SURVIVAL — RENDER POWER-UP BAR (HTML)
+// =============================================================================
 function renderPowerUpBar() {
     const bar = document.getElementById('powerupBar');
     bar.innerHTML = '';
+
     for (let i = 0; i < 4; i++) {
-        const pu   = puSlots[i];
+        const pu = puSlots[i];
         const slot = document.createElement('div');
         slot.style.cssText = `
-            width:64px;height:64px;border:2px solid ${pu ? pu.color : '#333'};
-            border-radius:8px;background:rgba(0,0,0,0.85);
-            display:flex;flex-direction:column;align-items:center;
-            justify-content:center;cursor:pointer;position:relative;
-            transition:0.15s;font-family:'Courier New',monospace;
-            opacity:${pu ? '1' : '0.3'};
+            width:64px; height:64px; border:2px solid ${pu ? pu.color : '#333'};
+            border-radius:8px; background:rgba(0,0,0,0.85);
+            display:flex; flex-direction:column; align-items:center;
+            justify-content:center; cursor:pointer; position:relative;
+            transition:0.15s; font-family:'Courier New',monospace;
+            opacity:${pu ? (pu.firstUse || sCoins >= pu.cost ? '1' : '0.4') : '0.3'};
             box-shadow:${pu ? `0 0 10px ${pu.color}55` : 'none'};
-            pointer-events:auto;user-select:none;
+            pointer-events:auto; user-select:none;
         `;
+
         if (pu) {
+            const costLabel = pu.firstUse ? 'FREE' : `${pu.cost}🪙`;
+            const canAfford = pu.firstUse || sCoins >= pu.cost;
             slot.innerHTML = `
                 <span style="font-size:1.4rem;">${pu.icon}</span>
                 <span style="font-size:0.5rem;color:${pu.color};letter-spacing:1px;">${pu.label}</span>
+                <span style="position:absolute;bottom:3px;right:5px;font-size:0.5rem;
+                    color:${pu.firstUse ? '#00f2ff' : (canAfford ? '#ffaa00' : '#ff0044')};">
+                    ${costLabel}
+                </span>
                 <span style="position:absolute;top:2px;left:5px;font-size:0.55rem;color:#555;">${i+1}</span>
             `;
             slot.onclick = () => usePowerUp(i);
-            slot.title   = `${pu.label} — Press ${i+1}`;
+            slot.title = `${pu.label} — ${pu.firstUse ? 'First use FREE' : `Costs ${pu.cost} coins`} — Press ${i+1}`;
         } else {
             slot.innerHTML = `<span style="font-size:0.65rem;color:#333;">[${i+1}]</span>`;
         }
+
         bar.appendChild(slot);
     }
 }
 
+// =============================================================================
+// SURVIVAL — DRAW
+// =============================================================================
 function survivalDraw() {
     ctx.fillStyle = '#00010a';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     sStars.forEach(s => {
-        ctx.save(); ctx.globalAlpha = s.bright; ctx.fillStyle = '#ffffff';
-        ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+        ctx.save();
+        ctx.globalAlpha = s.bright;
+        ctx.fillStyle   = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
     });
 
     ctx.save();
-    if (shakeAmt > 0.1) { ctx.translate((Math.random()-0.5)*shakeAmt, (Math.random()-0.5)*shakeAmt); shakeAmt *= 0.85; }
+    if (shakeAmt > 0.1) {
+        ctx.translate((Math.random() - 0.5) * shakeAmt, (Math.random() - 0.5) * shakeAmt);
+        shakeAmt *= 0.85;
+    }
 
-    sParticles.forEach(p => { ctx.globalAlpha = p.life; ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y, p.size, p.size); });
+    sParticles.forEach(p => {
+        ctx.globalAlpha = p.life;
+        ctx.fillStyle   = p.color;
+        ctx.fillRect(p.x, p.y, p.size, p.size);
+    });
     ctx.globalAlpha = 1;
 
-    // Coin drops
     sCoinDrops.forEach(c => {
-        ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(c.rot);
-        ctx.shadowColor = '#ffaa00'; ctx.shadowBlur = 16; ctx.fillStyle = '#ffcc00';
+        ctx.save();
+        ctx.translate(c.x, c.y);
+        ctx.rotate(c.rot);
+        ctx.shadowColor = '#ffaa00'; ctx.shadowBlur = 16;
+        ctx.fillStyle   = '#ffcc00';
         ctx.beginPath(); ctx.arc(0, 0, 11, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#7a4400'; ctx.font = 'bold 10px Courier New';
-        ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('¢', 0, 1);
+        ctx.fillStyle   = '#7a4400';
+        ctx.font        = 'bold 10px Courier New';
+        ctx.textAlign   = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('¢', 0, 1);
         ctx.restore();
     });
 
-    // Power-up drops
     sPowerDrops.forEach(d => {
-        ctx.save(); ctx.translate(d.x, d.y); ctx.rotate(d.rot);
-        ctx.shadowColor = d.pu.color; ctx.shadowBlur = 20 + Math.sin(Date.now() / 200) * 8;
+        ctx.save();
+        ctx.translate(d.x, d.y);
+        ctx.rotate(d.rot);
+        ctx.shadowColor = d.pu.color;
+        ctx.shadowBlur  = 20 + Math.sin(Date.now() / 200) * 8;
         ctx.strokeStyle = d.pu.color; ctx.lineWidth = 2;
-        ctx.strokeRect(-18, -18, 36, 36); ctx.fillStyle = d.pu.color + '22'; ctx.fillRect(-18, -18, 36, 36);
-        ctx.shadowBlur = 0; ctx.font = '20px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillText(d.pu.icon, 0, 0); ctx.restore();
+        ctx.strokeRect(-18, -18, 36, 36);
+        ctx.fillStyle   = d.pu.color + '22';
+        ctx.fillRect(-18, -18, 36, 36);
+        ctx.shadowBlur  = 0;
+        ctx.font        = '20px Arial';
+        ctx.textAlign   = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(d.pu.icon, 0, 0);
+        ctx.restore();
     });
 
-    // Enemy bullets
     sEBullets.forEach(b => {
-        ctx.save(); ctx.shadowColor = b.color; ctx.shadowBlur = 14; ctx.fillStyle = b.color;
+        ctx.save();
+        ctx.shadowColor = b.color; ctx.shadowBlur = 14;
+        ctx.fillStyle   = b.color;
         const angle = Math.atan2(b.vy, b.vx) + Math.PI / 2;
         ctx.translate(b.x, b.y); ctx.rotate(angle);
-        ctx.beginPath(); ctx.ellipse(0, 0, b.r * 0.55, b.r * 2, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath();
+        ctx.ellipse(0, 0, b.r * 0.55, b.r * 2, 0, 0, Math.PI * 2);
+        ctx.fill();
         ctx.restore();
     });
 
-    // Player bullets
     sBullets.forEach(b => {
         if (b.type === 'laser') {
-            ctx.save(); ctx.globalAlpha = b.life;
-            ctx.strokeStyle = '#ff0044'; ctx.lineWidth = 8; ctx.shadowColor = '#ff0044'; ctx.shadowBlur = 35;
+            ctx.save();
+            ctx.globalAlpha = b.life;
+            ctx.strokeStyle = '#ff0044'; ctx.lineWidth = 8;
+            ctx.shadowColor = '#ff0044'; ctx.shadowBlur = 35;
             ctx.beginPath(); ctx.moveTo(b.x, canvas.height); ctx.lineTo(b.x, 0); ctx.stroke();
             ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.shadowBlur = 0;
             ctx.beginPath(); ctx.moveTo(b.x, canvas.height); ctx.lineTo(b.x, 0); ctx.stroke();
-            ctx.restore(); return;
+            ctx.restore();
+            return;
         }
+
         ctx.save();
         b.trail.forEach((pt, ti) => {
-            ctx.globalAlpha = (ti / b.trail.length) * 0.5; ctx.fillStyle = b.color;
-            ctx.beginPath(); ctx.arc(pt.x, pt.y, b.r * (ti / b.trail.length), 0, Math.PI * 2); ctx.fill();
+            ctx.globalAlpha = (ti / b.trail.length) * 0.5;
+            ctx.fillStyle   = b.color;
+            ctx.beginPath();
+            ctx.arc(pt.x, pt.y, b.r * (ti / b.trail.length), 0, Math.PI * 2);
+            ctx.fill();
         });
-        ctx.globalAlpha = 1; ctx.shadowColor = b.color; ctx.shadowBlur = 20; ctx.fillStyle = '#ffffff';
+        ctx.globalAlpha = 1;
+        ctx.shadowColor = b.color; ctx.shadowBlur = 20;
+        ctx.fillStyle   = '#ffffff';
         ctx.beginPath(); ctx.ellipse(b.x, b.y, b.r * 0.45, b.r * 2.4, 0, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = b.color; ctx.globalAlpha = 0.55;
+        ctx.fillStyle   = b.color; ctx.globalAlpha = 0.55;
         ctx.beginPath(); ctx.ellipse(b.x, b.y, b.r, b.r * 3.8, 0, 0, Math.PI * 2); ctx.fill();
-        ctx.globalAlpha = 1; ctx.restore();
+        ctx.globalAlpha = 1;
+        ctx.restore();
     });
 
-    // Enemies
+    // Draw enemies with HP bar for multi-HP enemies
     sEnemies.forEach(en => {
-        ctx.save(); ctx.translate(en.x, en.y); ctx.rotate(en.rot);
+        ctx.save();
+        ctx.translate(en.x, en.y);
+        ctx.rotate(en.rot);
         const pulse = 1 + Math.sin(en.pulseT) * 0.08;
         ctx.scale(pulse, pulse);
-        ctx.shadowColor = en.color; ctx.shadowBlur = en.isBoss ? 35 : 16; ctx.fillStyle = en.color;
+        ctx.shadowColor = en.color;
+        ctx.shadowBlur  = en.isBoss ? 35 : 16;
+        ctx.fillStyle   = en.color;
+
         if (en.isBoss) {
             ctx.beginPath();
             for (let s = 0; s < 6; s++) {
                 const a = (s / 6) * Math.PI * 2 - Math.PI / 6;
-                s === 0 ? ctx.moveTo(Math.cos(a)*en.w/2, Math.sin(a)*en.h/2)
-                        : ctx.lineTo(Math.cos(a)*en.w/2, Math.sin(a)*en.h/2);
+                s === 0
+                    ? ctx.moveTo(Math.cos(a) * en.w / 2, Math.sin(a) * en.h / 2)
+                    : ctx.lineTo(Math.cos(a) * en.w / 2, Math.sin(a) * en.h / 2);
             }
             ctx.closePath(); ctx.fill();
             ctx.strokeStyle = '#ffffff44'; ctx.lineWidth = 2; ctx.stroke();
-            ctx.rotate(-en.rot); ctx.scale(1/pulse, 1/pulse);
+            ctx.rotate(-en.rot); ctx.scale(1 / pulse, 1 / pulse);
             const bw = en.w * 1.2;
-            ctx.fillStyle = '#220000'; ctx.fillRect(-bw/2, -en.h/2-16, bw, 8);
-            ctx.fillStyle = '#ff00ff'; ctx.shadowBlur = 6; ctx.fillRect(-bw/2, -en.h/2-16, bw*(en.hp/en.maxHp), 8);
-        } else {
-            if (en.maxHp >= 2) { ctx.shadowColor = '#ff8800'; ctx.strokeStyle = '#ff8800'; ctx.lineWidth = 2; }
+            ctx.fillStyle = '#220000'; ctx.fillRect(-bw / 2, -en.h / 2 - 16, bw, 8);
+            ctx.fillStyle = '#ff00ff'; ctx.shadowBlur = 6;
+            ctx.fillRect(-bw / 2, -en.h / 2 - 16, bw * (en.hp / en.maxHp), 8);
+        } else if (en.enemyType === 'diver') {
+            // Sharp arrowhead — reads as "fast and pointed" even before it dashes
             ctx.beginPath();
-            ctx.moveTo(0, en.h/2); ctx.lineTo(en.w/2, -en.h/2); ctx.lineTo(-en.w/2, -en.h/2);
+            ctx.moveTo(0, en.h / 2);
+            ctx.lineTo(en.w / 2, -en.h / 4);
+            ctx.lineTo(en.w / 5, -en.h / 2);
+            ctx.lineTo(-en.w / 5, -en.h / 2);
+            ctx.lineTo(-en.w / 2, -en.h / 4);
             ctx.closePath(); ctx.fill();
-            if (en.maxHp >= 2) {
-                ctx.stroke(); ctx.rotate(-en.rot); ctx.scale(1/pulse, 1/pulse);
-                for (let p = 0; p < en.hp; p++) {
-                    ctx.fillStyle = '#ff8800'; ctx.shadowBlur = 4;
-                    ctx.beginPath(); ctx.arc(-4 + p*8, -en.h/2-8, 3, 0, Math.PI*2); ctx.fill();
-                }
+            if (en.diverState === 'dashing') {
+                ctx.strokeStyle = '#ffffff88'; ctx.lineWidth = 1.5; ctx.stroke();
             }
+        } else if (en.enemyType === 'splitter') {
+            // Two overlapping diamonds hint that it splits on death
+            ctx.beginPath();
+            ctx.moveTo(-en.w / 5, en.h / 2); ctx.lineTo(-en.w / 2, 0);
+            ctx.lineTo(-en.w / 5, -en.h / 2); ctx.lineTo(en.w / 10, 0);
+            ctx.closePath(); ctx.fill();
+            ctx.beginPath();
+            ctx.moveTo(en.w / 5, en.h / 2); ctx.lineTo(-en.w / 10, 0);
+            ctx.lineTo(en.w / 5, -en.h / 2); ctx.lineTo(en.w / 2, 0);
+            ctx.closePath(); ctx.fill();
+        } else if (en.enemyType === 'shielded') {
+            // Hexagonal core, shield ring drawn separately below
+            ctx.beginPath();
+            for (let s = 0; s < 6; s++) {
+                const a = (s / 6) * Math.PI * 2;
+                s === 0
+                    ? ctx.moveTo(Math.cos(a) * en.w / 2.6, Math.sin(a) * en.h / 2.6)
+                    : ctx.lineTo(Math.cos(a) * en.w / 2.6, Math.sin(a) * en.h / 2.6);
+            }
+            ctx.closePath(); ctx.fill();
+        } else if (en.enemyType === 'mini') {
+            // Tiny triangle, smaller and simpler than a grunt
+            ctx.beginPath();
+            ctx.moveTo(0, en.h / 2);
+            ctx.lineTo(en.w / 2, -en.h / 2);
+            ctx.lineTo(-en.w / 2, -en.h / 2);
+            ctx.closePath(); ctx.fill();
+        } else {
+            // grunt — original triangle silhouette
+            ctx.beginPath();
+            ctx.moveTo(0,          en.h / 2);
+            ctx.lineTo( en.w / 2, -en.h / 2);
+            ctx.lineTo(-en.w / 2, -en.h / 2);
+            ctx.closePath(); ctx.fill();
+        }
+
+        // HP bar for any multi-HP non-boss enemy (wave 3+ grunts, splitters, shielded)
+        if (!en.isBoss && en.maxHp > 1) {
+            ctx.rotate(-en.rot); ctx.scale(1 / pulse, 1 / pulse);
+            const bw = en.w;
+            ctx.fillStyle = '#220000'; ctx.fillRect(-bw / 2, -en.h / 2 - 10, bw, 5);
+            ctx.fillStyle = '#ff0044'; ctx.shadowBlur = 4;
+            ctx.fillRect(-bw / 2, -en.h / 2 - 10, bw * (en.hp / en.maxHp), 5);
         }
         ctx.restore();
-    });
 
-    // Combo floating text
-    if (comboDisplay.timer > 0) {
-        const alpha = Math.min(1, comboDisplay.timer / 40);
-        const rise  = (130 - comboDisplay.timer) * 0.25;
-        ctx.save();
-        ctx.globalAlpha = alpha; ctx.fillStyle = comboDisplay.color;
-        ctx.shadowColor = comboDisplay.color; ctx.shadowBlur = 18;
-        ctx.font = 'bold 22px Courier New'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillText(comboDisplay.text, comboDisplay.x, comboDisplay.y - rise);
-        ctx.restore();
-    }
-
-    // Combo progress bar
-    if (sCombo > 0) {
-        const pct = sCombo / COMBO_GOAL;
-        const barW = 180; const barX = canvas.width/2 - barW/2; const barY = canvas.height - 110;
-        ctx.save();
-        ctx.fillStyle = '#111'; ctx.fillRect(barX, barY, barW, 8);
-        ctx.fillStyle = '#ffaa00'; ctx.shadowColor = '#ffaa00'; ctx.shadowBlur = 8;
-        ctx.fillRect(barX, barY, barW * pct, 8);
-        ctx.shadowBlur = 0; ctx.fillStyle = '#ffaa00';
-        ctx.font = '9px Courier New'; ctx.textAlign = 'center';
-        ctx.fillText(`COMBO ${sCombo}/${COMBO_GOAL}`, canvas.width/2, barY - 6);
-        ctx.restore();
-    }
-
-    // Wave 4 notice
-    if (sWave === 4 && sPowerDrops.length === 0 && sEnemies.length > 0) {
-        const t = Date.now() % 4000;
-        if (t < 3000) {
-            ctx.save(); ctx.globalAlpha = Math.max(0, 1 - t/3000);
-            ctx.fillStyle = '#ffaa00'; ctx.font = 'bold 14px Courier New'; ctx.textAlign = 'center';
-            ctx.fillText('⚠ FIELD DROPS ENDED — BUY FROM INVENTORY (PAUSE)', canvas.width/2, canvas.height/2 - 60);
+        // Shield ring — drawn outside the main save/restore so its own
+        // rotation doesn't inherit the enemy's pulse scale, keeping the
+        // ring's stroke width consistent regardless of body pulsing.
+        if (en.enemyType === 'shielded' && en.shieldHp > 0) {
+            ctx.save();
+            ctx.translate(en.x, en.y);
+            ctx.rotate(en.shieldRot);
+            ctx.strokeStyle = '#00c8ff';
+            ctx.shadowColor = '#00c8ff'; ctx.shadowBlur = 12;
+            ctx.globalAlpha = 0.4 + (en.shieldHp / en.shieldMaxHp) * 0.5;
+            ctx.lineWidth = 2.5;
+            const segs = 8;
+            for (let s = 0; s < segs; s++) {
+                const a0 = (s / segs) * Math.PI * 2;
+                const a1 = a0 + (Math.PI * 2 / segs) * 0.65; // gaps between segments
+                ctx.beginPath();
+                ctx.arc(0, 0, en.w / 1.6, a0, a1);
+                ctx.stroke();
+            }
             ctx.restore();
         }
-    }
+    });
 
-    // Shield aura
     if (puEffects.shield.active) {
-        ctx.save(); ctx.strokeStyle = '#00f2ff'; ctx.lineWidth = 3;
+        ctx.save();
+        ctx.strokeStyle = '#00f2ff'; ctx.lineWidth = 3;
         ctx.shadowColor = '#00f2ff'; ctx.shadowBlur = 24;
-        ctx.globalAlpha = 0.55 + Math.sin(Date.now()/100)*0.3;
-        ctx.beginPath(); ctx.arc(sPlayer.x, sPlayer.y, sPlayer.w, 0, Math.PI*2); ctx.stroke(); ctx.restore();
+        ctx.globalAlpha = 0.55 + Math.sin(Date.now() / 100) * 0.3;
+        ctx.beginPath(); ctx.arc(sPlayer.x, sPlayer.y, sPlayer.w, 0, Math.PI * 2); ctx.stroke();
+        ctx.restore();
     }
 
-    // Player ship
-    ctx.save(); ctx.translate(sPlayer.x, sPlayer.y);
-    ctx.shadowBlur = 20; ctx.shadowColor = sPlayer.invincTimer > 0 ? '#ffff00' : '#00f2ff';
-    if (sPlayer.invincTimer > 0) ctx.globalAlpha = 0.5 + Math.sin(Date.now()/55)*0.5;
-    ctx.drawImage(shipImg, -sPlayer.w/2, -sPlayer.h/2, sPlayer.w, sPlayer.h);
+    ctx.save();
+    ctx.translate(sPlayer.x, sPlayer.y);
+    ctx.shadowBlur  = 20;
+    ctx.shadowColor = sPlayer.invincTimer > 0 ? '#ffff00' : '#00f2ff';
+    if (sPlayer.invincTimer > 0) ctx.globalAlpha = 0.5 + Math.sin(Date.now() / 55) * 0.5;
+    ctx.drawImage(shipImg, -sPlayer.w / 2, -sPlayer.h / 2, sPlayer.w, sPlayer.h);
     ctx.restore();
 
-    // Engine thruster
     ctx.save();
-    const eY = sPlayer.y + sPlayer.h/2;
-    const flicker = 20 + Math.random()*18;
-    const grad = ctx.createLinearGradient(sPlayer.x, eY, sPlayer.x, eY+flicker+12);
-    grad.addColorStop(0, '#00f2ffdd'); grad.addColorStop(0.5, '#0044ffaa'); grad.addColorStop(1, 'transparent');
-    ctx.fillStyle = grad; ctx.shadowColor = '#00f2ff'; ctx.shadowBlur = 14;
+    const eY = sPlayer.y + sPlayer.h / 2;
+    const flicker = 20 + Math.random() * 18;
+    const grad = ctx.createLinearGradient(sPlayer.x, eY, sPlayer.x, eY + flicker + 12);
+    grad.addColorStop(0,   '#00f2ffdd');
+    grad.addColorStop(0.5, '#0044ffaa');
+    grad.addColorStop(1,   'transparent');
+    ctx.fillStyle   = grad; ctx.shadowColor = '#00f2ff'; ctx.shadowBlur = 14;
     ctx.beginPath();
-    ctx.moveTo(sPlayer.x-9, eY); ctx.lineTo(sPlayer.x+9, eY);
-    ctx.lineTo(sPlayer.x+2, eY+flicker); ctx.lineTo(sPlayer.x-2, eY+flicker);
-    ctx.closePath(); ctx.fill(); ctx.restore();
+    ctx.moveTo(sPlayer.x - 9,  eY); ctx.lineTo(sPlayer.x + 9,  eY);
+    ctx.lineTo(sPlayer.x + 2,  eY + flicker); ctx.lineTo(sPlayer.x - 2,  eY + flicker);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
 
-    // Active power-up strips
     let stripY = 110;
     Object.entries(puEffects).forEach(([k, v]) => {
         if (!v.active) return;
-        const def = POWER_UP_DEFS.find(p => p.type === k); if (!def) return;
-        const pct = def.duration > 0 ? Math.max(0, v.timer/def.duration) : 1;
+        const def = POWER_UP_DEFS.find(p => p.type === k);
+        if (!def) return;
+        const pct = def.duration > 0 ? Math.max(0, v.timer / def.duration) : 1;
         ctx.save();
-        ctx.fillStyle = 'rgba(0,0,0,0.75)'; ctx.fillRect(18, stripY, 140, 28);
+        ctx.fillStyle   = 'rgba(0,0,0,0.75)'; ctx.fillRect(18, stripY, 140, 28);
         ctx.strokeStyle = def.color; ctx.lineWidth = 1; ctx.strokeRect(18, stripY, 140, 28);
-        ctx.font = '12px Courier New'; ctx.fillStyle = def.color; ctx.textBaseline = 'middle';
-        ctx.fillText(`${def.icon} ${def.label}`, 26, stripY+14);
+        ctx.font        = '12px Courier New'; ctx.fillStyle = def.color; ctx.textBaseline = 'middle';
+        ctx.fillText(`${def.icon} ${def.label}`, 26, stripY + 14);
         if (def.duration > 0) {
-            ctx.fillStyle = def.color+'44'; ctx.fillRect(90, stripY+7, 58, 14);
-            ctx.fillStyle = def.color; ctx.fillRect(90, stripY+7, 58*pct, 14);
+            ctx.fillStyle = def.color + '44'; ctx.fillRect(90, stripY + 7, 58, 14);
+            ctx.fillStyle = def.color; ctx.fillRect(90, stripY + 7, 58 * pct, 14);
         }
-        ctx.restore(); stripY += 34;
+        ctx.restore();
+        stripY += 34;
     });
+
+    // ---- Combo multiplier display (top-right) ----
+    if (sComboMult > 1 || sComboStreak > 0) {
+        ctx.save();
+        ctx.textAlign = 'right'; ctx.textBaseline = 'top';
+        ctx.font = 'bold 22px Courier New';
+        ctx.shadowColor = '#ffaa00'; ctx.shadowBlur = 10;
+        ctx.fillStyle = '#ffaa00';
+        ctx.fillText(`x${sComboMult} COMBO`, canvas.width - 20, 80);
+        ctx.font = '11px Courier New';
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#ffaa0099';
+        ctx.fillText(`${sComboStreak} STREAK`, canvas.width - 20, 105);
+        ctx.restore();
+    }
+
+    // ---- Toast notifications (top-center, fade + rise) ----
+    for (let i = sToasts.length - 1; i >= 0; i--) {
+        const t = sToasts[i];
+        t.life -= 0.012;
+        t.y -= 0.4;
+        if (t.life <= 0) { sToasts.splice(i, 1); continue; }
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, t.life * 1.5);
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.font = 'bold 18px Courier New';
+        ctx.shadowColor = t.color; ctx.shadowBlur = 14;
+        ctx.fillStyle = t.color;
+        ctx.fillText(t.text, canvas.width / 2, 150 + t.y - i * 26);
+        ctx.restore();
+    }
 
     ctx.restore();
 }
 
+// =============================================================================
+// SURVIVAL — PARTICLES
+// =============================================================================
 function createSurvivalParticles(x, y, color, big) {
     const count = big ? 45 : 11;
     for (let i = 0; i < count; i++) {
         sParticles.push({
             x, y,
-            vx: (Math.random()-0.5)*(big?10:5),
-            vy: (Math.random()-0.5)*(big?10:5),
-            size: Math.random()*(big?7:3)+1,
-            life: 1.0, color,
+            vx: (Math.random() - 0.5) * (big ? 10 : 5),
+            vy: (Math.random() - 0.5) * (big ? 10 : 5),
+            size: Math.random() * (big ? 7 : 3) + 1,
+            life: 1.0,
+            color,
         });
     }
 }
 
+// =============================================================================
+// SURVIVAL — HUD UPDATE
+// =============================================================================
 function updateSurvivalHUD() {
     const hearts = '❤️'.repeat(Math.max(0, sPlayer.lives)) || '💀';
     document.getElementById('sLives').innerText  = hearts;
@@ -1142,24 +1704,45 @@ function updateSurvivalHUD() {
     renderPowerUpBar();
 }
 
-function survivalLoop() {
-    survivalUpdate(); survivalDraw();
-    if (survivalActive && !isPaused) requestAnimationFrame(survivalLoop);
+// =============================================================================
+// SURVIVAL — MAIN LOOP
+// =============================================================================
+function survivalLoop(loopId) {
+    if (loopId !== survivalLoopId) return; // a newer startSurvival() has taken over — stop this stale chain
+    survivalUpdate();
+    survivalDraw();
+    if (survivalActive && !isPaused) requestAnimationFrame(() => survivalLoop(loopId));
 }
 
-// Mobile touch
+// =============================================================================
+// SURVIVAL — MOBILE TOUCH CONTROLS
+// =============================================================================
 let _touchX = 0;
 canvas.addEventListener('touchstart', e => {
     if (!survivalActive) return;
-    _touchX = e.touches[0].clientX; survivalShoot();
+    _touchX = e.touches[0].clientX;
+    survivalShoot();
 }, { passive: true });
+
 canvas.addEventListener('touchmove', e => {
     if (!survivalActive) return;
     const dx = e.touches[0].clientX - _touchX;
-    sPlayer.x = Math.max(sPlayer.w/2, Math.min(canvas.width-sPlayer.w/2, sPlayer.x+dx*0.6));
-    _touchX = e.touches[0].clientX; survivalShoot();
+    sPlayer.x = Math.max(sPlayer.w / 2,
+        Math.min(canvas.width - sPlayer.w / 2, sPlayer.x + dx * 0.6));
+    _touchX = e.touches[0].clientX;
+    survivalShoot();
 }, { passive: true });
 
+window.addEventListener('keydown', e => {
+    if (e.key === ' ' && survivalActive && !isPaused) sKeys.space = true;
+});
+window.addEventListener('keyup', e => {
+    if (e.key === ' ') sKeys.space = false;
+});
+
+// =============================================================================
+// RESIZE
+// =============================================================================
 window.addEventListener('resize', () => {
     canvas.width  = window.innerWidth;
     canvas.height = window.innerHeight;
