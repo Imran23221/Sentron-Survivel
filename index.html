@@ -1,327 +1,1183 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SENTRON SURVIVAL: ARMAGEDDON</title>
-    <style>
-        body { margin: 0; overflow: hidden; background: #000; color: #fff; font-family: 'Courier New', monospace; }
-        canvas { display: block; filter: contrast(1.1) brightness(1.1); }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>SENTRON</title>
+<style>
+/* ============================================================
+   SENTRON — Main Menu Stylesheet
+   Palette: #00f2ff cyan · #bc13fe purple · #ffaa00 amber
+            #ff0044 red · #00010a deep-space bg
+   ============================================================ */
 
-        .menu-overlay {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            display: flex; justify-content: center; align-items: center;
-            background: rgba(0, 0, 0, 0.95); z-index: 1000;
-        }
+:root {
+    --cyan:   #00f2ff;
+    --purple: #bc13fe;
+    --amber:  #ffaa00;
+    --red:    #ff0044;
+    --green:  #00ffaa;
+    --bg:     #00010a;
+    --panel:  rgba(0,10,28,0.82);
+    --border: rgba(0,242,255,0.18);
+    --font:   'Courier New', Courier, monospace;
+}
 
-        .terminal-box {
-            width: 520px; padding: 40px; background: #000;
-            border: 3px solid #ff0044; border-radius: 20px;
-            box-shadow: 0 0 40px #ff0044; text-align: center;
-        }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-        .rules-list { text-align: left; color: #00f2ff; margin: 20px 0; font-size: 14px; line-height: 1.6; }
-        .rules-list b { color: #ff0044; }
+html, body {
+    width: 100%; height: 100%;
+    background: var(--bg);
+    color: #ffffff;
+    font-family: var(--font);
+    overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+}
 
-        .ship-grid { display: flex; gap: 15px; justify-content: center; margin: 25px 0; }
-        .ship-card {
-            width: 90px; padding: 10px; border: 2px solid #333;
-            cursor: pointer; transition: 0.3s; border-radius: 10px;
-        }
-        .selected { border-color: #ff0044 !important; box-shadow: 0 0 15px #ff0044; background: rgba(255, 0, 68, 0.1); }
-        .ship-card img { width: 100%; height: auto; }
+/* ── SCROLLBARS ──────────────────────────────────────────── */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--cyan); border-radius: 2px; }
 
-        .btn {
-            background: #ff0044; color: white; border: none; padding: 15px 40px;
-            font-weight: bold; cursor: pointer; border-radius: 5px;
-            text-transform: uppercase; margin: 10px; font-family: 'Courier New';
-        }
-        .btn:hover { background: #00f2ff; color: #000; box-shadow: 0 0 20px #00f2ff; }
+/* ── CANVAS ──────────────────────────────────────────────── */
+#gameCanvas {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 0;
+    display: block;
+}
 
-        .btn-survival {
-            background: #ffaa00; color: #000; border: none; padding: 15px 40px;
-            font-weight: bold; cursor: pointer; border-radius: 5px;
-            text-transform: uppercase; margin: 10px; font-family: 'Courier New';
-            font-size: 1rem; letter-spacing: 2px;
-            box-shadow: 0 0 14px #ffaa0088;
-        }
-        .btn-survival:hover { background: #fff; color: #000; box-shadow: 0 0 28px #ffaa00; }
+/* ── ANIMATED BACKGROUND PARTICLES ──────────────────────── */
+#bgCanvas {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 1;
+    pointer-events: none;
+}
 
-        .ui-layer { position: fixed; top: 20px; left: 20px; pointer-events: none; z-index: 100; }
-        .hud-item { background: rgba(0,0,0,0.8); padding: 12px; border-left: 5px solid #ff0044; margin-bottom: 8px; font-size: 18px; }
+/* ── OVERLAY BASE ────────────────────────────────────────── */
+.menu-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,1,10,0.72);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    animation: fadeIn 0.35s ease both;
+}
 
-        #pauseMenu { display: none; }
+@keyframes fadeIn {
+    from { opacity: 0; transform: scale(0.97); }
+    to   { opacity: 1; transform: scale(1); }
+}
 
-        /* ===================== SURVIVAL HUD ===================== */
-        #survivalHUD {
-            display: none;
-            position: fixed; top: 0; left: 0; right: 0; height: 62px;
-            background: rgba(0, 0, 0, 0.88);
-            border-bottom: 2px solid #ff004455;
-            z-index: 100; pointer-events: none;
-            flex-direction: row; align-items: center;
-            justify-content: center; gap: 40px;
-        }
-        .s-hud-cell { text-align: center; }
-        .s-hud-label { display: block; font-size: 0.55rem; color: #ff004499; letter-spacing: 3px; text-transform: uppercase; }
-        .s-hud-val   { display: block; font-size: 1.15rem; color: #ff0044; font-weight: bold; }
-        .s-hud-val.cyan  { color: #00f2ff; }
-        .s-hud-val.gold  { color: #ffaa00; }
-        .s-hud-val.white { color: #ffffff; }
+/* ── TERMINAL BOX (reusable panel) ──────────────────────── */
+.terminal-box {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 36px 40px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+    box-shadow:
+        0 0 0 1px rgba(0,242,255,0.06),
+        0 8px 60px rgba(0,0,0,0.7),
+        inset 0 1px 0 rgba(255,255,255,0.06);
+}
 
-        /* ===================== POWER-UP BAR ===================== */
-        #powerupBar {
-            display: none;
-            position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
-            gap: 12px; z-index: 200; flex-direction: row; align-items: center;
-            pointer-events: auto;
-        }
-        #powerupBar-label {
-            display: none;
-            position: fixed; bottom: 92px; left: 50%; transform: translateX(-50%);
-            font-size: 0.6rem; color: #ffaa0099; letter-spacing: 4px;
-            z-index: 200; pointer-events: none;
-            text-align: center; white-space: nowrap;
-        }
+/* Animated top glow line */
+.terminal-box::before {
+    content: '';
+    position: absolute;
+    top: 0; left: -100%;
+    width: 300%;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+    animation: scanLine 3s linear infinite;
+}
 
-        /* ===================== SURVIVAL GAME OVER ===================== */
-        #survivalOverScreen { display: none; }
-        #survivalOverScreen .terminal-box {
-            border-color: #ffaa00;
-            box-shadow: 0 0 40px #ffaa00;
-        }
-        .surv-best-line {
-            font-size: 0.7rem; color: #ffaa0099; letter-spacing: 2px;
-            margin-top: 18px; margin-bottom: 4px;
-        }
-        .surv-new-best-tag {
-            display: none;
-            font-size: 0.85rem; color: #00ff88; letter-spacing: 3px;
-            margin-bottom: 10px; text-shadow: 0 0 10px #00ff8888;
-        }
+@keyframes scanLine {
+    0%   { left: -100%; }
+    100% { left: 100%; }
+}
 
-        /* ===================== SURVIVAL PAUSE MENU ===================== */
-        #survivalPauseMenu {
-            display: none;
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            justify-content: center; align-items: center;
-            background: rgba(0,0,0,0.92); z-index: 2000;
-        }
-        #survivalPauseMenu .terminal-box {
-            border-color: #ffaa00;
-            box-shadow: 0 0 40px #ffaa00;
-        }
+/* Corner accents */
+.terminal-box::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 16px;
+    background: radial-gradient(ellipse at 50% 0%, rgba(0,242,255,0.05) 0%, transparent 70%);
+    pointer-events: none;
+}
 
-        /* ===================== SURVIVAL INVENTORY ===================== */
-        #survivalInventory {
-            display: none;
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            justify-content: center; align-items: center;
-            background: rgba(0,0,0,0.97); z-index: 3000;
-            flex-direction: column;
-        }
+/* ── LOGO / TITLE ─────────────────────────────────────────── */
+.game-logo {
+    font-size: clamp(2.8rem, 7vw, 5.2rem);
+    font-weight: 900;
+    letter-spacing: 0.25em;
+    color: #fff;
+    text-shadow:
+        0 0 20px var(--cyan),
+        0 0 60px var(--cyan),
+        0 0 120px rgba(0,242,255,0.4);
+    animation: logoGlow 2.5s ease-in-out infinite alternate;
+    position: relative;
+    display: inline-block;
+    margin-bottom: 4px;
+}
 
-        .inventory-box {
-            width: 600px; max-width: 96vw;
-            padding: 32px 28px; background: #000;
-            border: 2px solid #ffaa00; border-radius: 16px;
-            box-shadow: 0 0 50px #ffaa0066;
-            text-align: center;
-            font-family: 'Courier New', monospace;
-        }
+@keyframes logoGlow {
+    from { text-shadow: 0 0 20px var(--cyan), 0 0 60px var(--cyan), 0 0 100px rgba(0,242,255,0.3); }
+    to   { text-shadow: 0 0 30px var(--cyan), 0 0 80px var(--cyan), 0 0 160px rgba(0,242,255,0.55); }
+}
 
-        .inventory-header {
-            display: flex; justify-content: space-between; align-items: center;
-            margin-bottom: 10px;
-        }
+.logo-sub {
+    font-size: 0.62rem;
+    letter-spacing: 0.5em;
+    color: var(--cyan);
+    opacity: 0.7;
+    margin-bottom: 28px;
+    display: block;
+    text-transform: uppercase;
+}
 
-        .inventory-title {
-            font-size: 1.2rem; color: #ffaa00; letter-spacing: 4px;
-        }
+/* Glitch effect on logo */
+.game-logo::before,
+.game-logo::after {
+    content: attr(data-text);
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    overflow: hidden;
+    pointer-events: none;
+}
+.game-logo::before {
+    color: var(--red);
+    animation: glitchTop 4s infinite;
+    clip-path: polygon(0 0, 100% 0, 100% 35%, 0 35%);
+    opacity: 0.5;
+}
+.game-logo::after {
+    color: var(--cyan);
+    animation: glitchBot 4s infinite reverse;
+    clip-path: polygon(0 65%, 100% 65%, 100% 100%, 0 100%);
+    opacity: 0.35;
+}
 
-        .inventory-coin-display {
-            font-size: 1rem; color: #ffcc00;
-            background: rgba(255,170,0,0.1); border: 1px solid #ffaa0055;
-            padding: 6px 14px; border-radius: 6px;
-        }
+@keyframes glitchTop {
+    0%,94%,100% { transform: translateX(0); opacity: 0; }
+    95%          { transform: translateX(-3px); opacity: 0.5; }
+    97%          { transform: translateX(3px); opacity: 0.5; }
+    99%          { transform: translateX(-2px); opacity: 0.5; }
+}
+@keyframes glitchBot {
+    0%,92%,100% { transform: translateX(0); opacity: 0; }
+    93%          { transform: translateX(3px); opacity: 0.35; }
+    96%          { transform: translateX(-3px); opacity: 0.35; }
+    98%          { transform: translateX(2px); opacity: 0.35; }
+}
 
-        .inventory-subtitle {
-            font-size: 0.6rem; color: #ffffff44; letter-spacing: 3px;
-            margin-bottom: 22px;
-        }
+/* ── BUTTONS ──────────────────────────────────────────────── */
+.btn {
+    display: block;
+    width: 100%;
+    padding: 13px 28px;
+    margin: 8px 0;
+    border: 1px solid var(--cyan);
+    border-radius: 8px;
+    background: rgba(0,242,255,0.06);
+    color: var(--cyan);
+    font-family: var(--font);
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: all 0.18s ease;
+    position: relative;
+    overflow: hidden;
+}
 
-        #inventoryGrid {
-            display: flex; flex-wrap: wrap; gap: 14px;
-            justify-content: center; margin-bottom: 24px;
-        }
+.btn::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(0,242,255,0.12), transparent);
+    transform: translateX(-100%);
+    transition: transform 0.4s ease;
+}
+.btn:hover::before { transform: translateX(100%); }
 
-        .inv-back-btn {
-            background: none; border: 2px solid #ffaa00; color: #ffaa00;
-            padding: 10px 30px; border-radius: 6px; cursor: pointer;
-            font-family: 'Courier New', monospace; font-size: 0.85rem;
-            letter-spacing: 2px; text-transform: uppercase;
-            transition: 0.15s;
-        }
-        .inv-back-btn:hover { background: #ffaa00; color: #000; }
-    </style>
+.btn:hover {
+    background: rgba(0,242,255,0.14);
+    box-shadow: 0 0 22px rgba(0,242,255,0.35), inset 0 0 12px rgba(0,242,255,0.08);
+    transform: translateY(-1px);
+    color: #fff;
+}
+
+.btn:active { transform: translateY(1px); }
+
+/* Variant: primary filled */
+.btn-primary {
+    background: linear-gradient(135deg, rgba(0,242,255,0.22), rgba(0,242,255,0.08));
+    border-color: var(--cyan);
+    color: #fff;
+    font-size: 0.9rem;
+}
+.btn-primary:hover {
+    background: linear-gradient(135deg, rgba(0,242,255,0.38), rgba(0,242,255,0.18));
+    box-shadow: 0 0 32px rgba(0,242,255,0.45);
+}
+
+/* Variant: purple */
+.btn-purple {
+    border-color: var(--purple);
+    color: var(--purple);
+    background: rgba(188,19,254,0.07);
+}
+.btn-purple:hover {
+    background: rgba(188,19,254,0.18);
+    box-shadow: 0 0 22px rgba(188,19,254,0.4);
+    color: #fff;
+}
+
+/* Variant: amber */
+.btn-amber {
+    border-color: var(--amber);
+    color: var(--amber);
+    background: rgba(255,170,0,0.07);
+}
+.btn-amber:hover {
+    background: rgba(255,170,0,0.18);
+    box-shadow: 0 0 22px rgba(255,170,0,0.4);
+    color: #fff;
+}
+
+/* Variant: danger */
+.btn-danger {
+    border-color: var(--red);
+    color: var(--red);
+    background: rgba(255,0,68,0.07);
+}
+.btn-danger:hover {
+    background: rgba(255,0,68,0.18);
+    box-shadow: 0 0 22px rgba(255,0,68,0.4);
+    color: #fff;
+}
+
+/* Difficulty buttons: side by side */
+.diff-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 10px;
+    margin: 10px 0;
+}
+.diff-row .btn {
+    padding: 12px 10px;
+    font-size: 0.72rem;
+}
+
+/* ── INPUTS ──────────────────────────────────────────────── */
+.input-group {
+    position: relative;
+    margin: 18px 0;
+}
+
+.input-group label {
+    display: block;
+    font-size: 0.55rem;
+    letter-spacing: 0.35em;
+    color: var(--cyan);
+    opacity: 0.7;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+}
+
+.game-input {
+    width: 100%;
+    padding: 13px 18px;
+    background: rgba(0,242,255,0.04);
+    border: 1px solid rgba(0,242,255,0.25);
+    border-radius: 8px;
+    color: #fff;
+    font-family: var(--font);
+    font-size: 1rem;
+    letter-spacing: 0.06em;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    text-align: center;
+}
+.game-input::placeholder { color: rgba(255,255,255,0.2); }
+.game-input:focus {
+    border-color: var(--cyan);
+    box-shadow: 0 0 20px rgba(0,242,255,0.25), inset 0 0 8px rgba(0,242,255,0.05);
+    background: rgba(0,242,255,0.07);
+}
+
+/* ── DIVIDER ─────────────────────────────────────────────── */
+.divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 18px 0;
+    opacity: 0.35;
+}
+.divider::before, .divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--cyan));
+}
+.divider::after { background: linear-gradient(90deg, var(--cyan), transparent); }
+.divider span { font-size: 0.5rem; letter-spacing: 0.3em; color: var(--cyan); white-space: nowrap; }
+
+/* ── SHIP SELECTION CARDS ────────────────────────────────── */
+.ship-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin: 18px 0 22px;
+}
+
+.ship-card {
+    background: rgba(0,242,255,0.04);
+    border: 1px solid rgba(0,242,255,0.15);
+    border-radius: 12px;
+    padding: 18px 10px 14px;
+    cursor: pointer;
+    transition: all 0.22s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.ship-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at 50% 30%, rgba(0,242,255,0.08), transparent 70%);
+    opacity: 0;
+    transition: opacity 0.22s;
+}
+
+.ship-card:hover { border-color: rgba(0,242,255,0.5); transform: translateY(-3px); box-shadow: 0 8px 28px rgba(0,0,0,0.5), 0 0 20px rgba(0,242,255,0.15); }
+.ship-card:hover::before { opacity: 1; }
+
+.ship-card.selected {
+    border-color: var(--cyan);
+    background: rgba(0,242,255,0.10);
+    box-shadow: 0 0 30px rgba(0,242,255,0.25), inset 0 0 15px rgba(0,242,255,0.06);
+}
+
+.ship-card.selected::after {
+    content: '✓';
+    position: absolute;
+    top: 6px; right: 8px;
+    font-size: 0.65rem;
+    color: var(--cyan);
+}
+
+.ship-card img {
+    width: 56px; height: 56px;
+    object-fit: contain;
+    display: block;
+    margin: 0 auto 10px;
+    filter: drop-shadow(0 0 8px rgba(0,242,255,0.6));
+    transition: filter 0.22s, transform 0.22s;
+}
+.ship-card:hover img, .ship-card.selected img {
+    filter: drop-shadow(0 0 16px rgba(0,242,255,0.9));
+    transform: translateY(-2px) scale(1.05);
+}
+
+.ship-card .ship-name {
+    font-size: 0.52rem;
+    letter-spacing: 0.2em;
+    color: var(--cyan);
+    opacity: 0.7;
+    text-transform: uppercase;
+    display: block;
+    margin-bottom: 2px;
+}
+.ship-card .ship-stat {
+    font-size: 0.46rem;
+    color: rgba(255,255,255,0.35);
+    letter-spacing: 0.1em;
+}
+
+/* ── SECTION HEADING ─────────────────────────────────────── */
+.section-title {
+    font-size: 0.5rem;
+    letter-spacing: 0.45em;
+    color: var(--cyan);
+    opacity: 0.6;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+    display: block;
+}
+
+/* ── STAT CHIPS (rules / info) ───────────────────────────── */
+.stat-row {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin: 10px 0;
+}
+
+.stat-chip {
+    background: rgba(0,242,255,0.06);
+    border: 1px solid rgba(0,242,255,0.15);
+    border-radius: 20px;
+    padding: 5px 14px;
+    font-size: 0.52rem;
+    letter-spacing: 0.12em;
+    color: rgba(255,255,255,0.6);
+}
+
+/* ── SCORE DISPLAY ───────────────────────────────────────── */
+.big-score {
+    font-size: clamp(2.4rem, 6vw, 4rem);
+    font-weight: 900;
+    color: var(--cyan);
+    text-shadow: 0 0 30px var(--cyan);
+    display: block;
+    letter-spacing: 0.08em;
+    margin: 8px 0;
+    animation: scorePop 0.4s cubic-bezier(0.175,0.885,0.32,1.275) both;
+}
+
+@keyframes scorePop {
+    from { transform: scale(0.7); opacity: 0; }
+    to   { transform: scale(1); opacity: 1; }
+}
+
+.label-small {
+    font-size: 0.5rem;
+    letter-spacing: 0.4em;
+    color: rgba(255,255,255,0.4);
+    text-transform: uppercase;
+}
+
+/* ── WAVE BADGE ──────────────────────────────────────────── */
+.wave-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(188,19,254,0.12);
+    border: 1px solid rgba(188,19,254,0.3);
+    border-radius: 20px;
+    padding: 5px 16px;
+    font-size: 0.65rem;
+    letter-spacing: 0.15em;
+    color: var(--purple);
+    margin: 6px auto;
+}
+
+/* ── BEST SCORE BANNER ───────────────────────────────────── */
+.best-banner {
+    font-size: 0.55rem;
+    letter-spacing: 0.2em;
+    color: var(--amber);
+    opacity: 0.75;
+    margin: 10px 0 0;
+    min-height: 18px;
+}
+
+.new-best-tag {
+    display: none;
+    background: linear-gradient(135deg, var(--amber), #ff8800);
+    color: #000;
+    font-size: 0.55rem;
+    font-weight: 900;
+    letter-spacing: 0.2em;
+    border-radius: 4px;
+    padding: 3px 10px;
+    margin: 6px auto 0;
+    animation: tagPop 0.5s cubic-bezier(0.175,0.885,0.32,1.275) both;
+}
+
+@keyframes tagPop {
+    from { transform: scale(0) rotate(-6deg); }
+    to   { transform: scale(1) rotate(0deg); }
+}
+
+/* ── CLASSIC HUD ─────────────────────────────────────────── */
+.ui-layer {
+    display: none;
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%;
+    z-index: 50;
+    pointer-events: none;
+}
+
+.hud-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 28px;
+    background: rgba(0,1,10,0.6);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid rgba(0,242,255,0.1);
+}
+
+.hud-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+}
+
+.hud-label {
+    font-size: 0.45rem;
+    letter-spacing: 0.4em;
+    color: rgba(255,255,255,0.35);
+    text-transform: uppercase;
+}
+
+.hud-value {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--cyan);
+    text-shadow: 0 0 12px var(--cyan);
+    letter-spacing: 0.06em;
+}
+
+.hud-ready { color: var(--green) !important; text-shadow: 0 0 12px var(--green) !important; }
+
+/* ── SURVIVAL HUD ────────────────────────────────────────── */
+#survivalHUD {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 50;
+    align-items: center;
+    justify-content: center;
+    gap: 40px;
+    padding: 12px 32px;
+    background: rgba(0,1,10,0.65);
+    backdrop-filter: blur(14px);
+    border-bottom: 1px solid rgba(0,242,255,0.12);
+    flex-wrap: wrap;
+}
+
+.surv-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    min-width: 52px;
+}
+
+.surv-label {
+    font-size: 0.42rem;
+    letter-spacing: 0.38em;
+    color: rgba(255,255,255,0.32);
+    text-transform: uppercase;
+}
+
+.surv-value {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--cyan);
+    text-shadow: 0 0 10px var(--cyan);
+    letter-spacing: 0.04em;
+}
+
+#sLives  { color: #ff6680 !important; text-shadow: 0 0 10px #ff6680 !important; font-size: 1.1rem !important; }
+#sWave   { color: var(--purple) !important; text-shadow: 0 0 10px var(--purple) !important; }
+#sCoins  { color: var(--amber)  !important; text-shadow: 0 0 10px var(--amber)  !important; }
+#sScore  { color: var(--cyan)   !important; }
+
+/* ── POWER-UP BAR ────────────────────────────────────────── */
+#powerupBar-label {
+    display: none;
+    position: fixed;
+    bottom: 90px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.42rem;
+    letter-spacing: 0.45em;
+    color: rgba(0,242,255,0.35);
+    z-index: 51;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+#powerupBar {
+    display: none;
+    position: fixed;
+    bottom: 18px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 51;
+    gap: 10px;
+    flex-direction: row;
+    padding: 10px 16px;
+    background: rgba(0,1,10,0.72);
+    backdrop-filter: blur(14px);
+    border: 1px solid rgba(0,242,255,0.12);
+    border-radius: 14px;
+    box-shadow: 0 -4px 30px rgba(0,0,0,0.5);
+}
+
+/* ── PAUSE MENU ──────────────────────────────────────────── */
+#pauseMenu { z-index: 200; }
+
+/* ── RULES OVERLAY ───────────────────────────────────────── */
+.rules-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin: 16px 0 20px;
+    text-align: left;
+}
+
+.rule-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    background: rgba(0,242,255,0.04);
+    border: 1px solid rgba(0,242,255,0.1);
+    border-radius: 8px;
+    padding: 10px 12px;
+}
+
+.rule-icon {
+    font-size: 1.1rem;
+    flex-shrink: 0;
+    margin-top: 1px;
+}
+
+.rule-text {
+    font-size: 0.52rem;
+    line-height: 1.7;
+    color: rgba(255,255,255,0.55);
+    letter-spacing: 0.04em;
+}
+
+.rule-text strong {
+    color: var(--cyan);
+    display: block;
+    margin-bottom: 1px;
+    letter-spacing: 0.1em;
+}
+
+/* ── MODE CARDS (in ship menu) ───────────────────────────── */
+.mode-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 18px;
+}
+
+.mode-card {
+    background: rgba(0,242,255,0.04);
+    border: 1px solid rgba(0,242,255,0.14);
+    border-radius: 12px;
+    padding: 18px 14px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.mode-card::before {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--cyan);
+    transform: scaleX(0);
+    transition: transform 0.25s ease;
+    transform-origin: left;
+}
+
+.mode-card:hover { border-color: rgba(0,242,255,0.45); transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
+.mode-card:hover::before { transform: scaleX(1); }
+
+.mode-card.survival-card { border-color: rgba(188,19,254,0.2); }
+.mode-card.survival-card::before { background: var(--purple); }
+.mode-card.survival-card:hover { border-color: rgba(188,19,254,0.55); box-shadow: 0 8px 24px rgba(0,0,0,0.5), 0 0 20px rgba(188,19,254,0.15); }
+
+.mode-icon { font-size: 1.8rem; display: block; margin-bottom: 8px; }
+.mode-title { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.15em; color: #fff; display: block; margin-bottom: 4px; }
+.mode-desc  { font-size: 0.47rem; color: rgba(255,255,255,0.4); letter-spacing: 0.06em; line-height: 1.6; }
+
+/* Classic diff buttons inside mode-card */
+.mode-card .diff-row {
+    margin-top: 12px;
+}
+
+/* ── DECORATIVE ELEMENTS ─────────────────────────────────── */
+.hex-deco {
+    position: absolute;
+    width: 120px; height: 120px;
+    border: 1px solid rgba(0,242,255,0.05);
+    border-radius: 50%;
+    animation: hexSpin 12s linear infinite;
+    pointer-events: none;
+}
+.hex-deco:nth-child(2) { width: 80px; height: 80px; animation-duration: 8s; animation-direction: reverse; border-color: rgba(188,19,254,0.05); }
+
+@keyframes hexSpin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+}
+
+/* ── CORNER DOTS decoration ──────────────────────────────── */
+.corner-dots {
+    position: absolute;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--cyan);
+    opacity: 0.4;
+    animation: dotPulse 2s ease-in-out infinite;
+}
+.corner-dots.tl { top: 12px; left: 12px; }
+.corner-dots.tr { top: 12px; right: 12px; animation-delay: 0.5s; }
+.corner-dots.bl { bottom: 12px; left: 12px; animation-delay: 1s; }
+.corner-dots.br { bottom: 12px; right: 12px; animation-delay: 1.5s; }
+
+@keyframes dotPulse {
+    0%,100% { opacity: 0.25; transform: scale(1); }
+    50%      { opacity: 0.7;  transform: scale(1.4); }
+}
+
+/* ── ANIMATED BORDER (pulsing panel) ─────────────────────── */
+.glow-border {
+    position: absolute;
+    inset: -1px;
+    border-radius: 17px;
+    background: conic-gradient(from 0deg, transparent 0%, var(--cyan) 10%, transparent 20%);
+    animation: borderSpin 4s linear infinite;
+    opacity: 0.15;
+    pointer-events: none;
+    z-index: -1;
+}
+
+@keyframes borderSpin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+}
+
+/* ── RESPONSIVE ──────────────────────────────────────────── */
+@media (max-width: 520px) {
+    .terminal-box { padding: 24px 18px; border-radius: 12px; }
+    .game-logo { font-size: 2.4rem; }
+    .ship-grid { grid-template-columns: repeat(3,1fr); gap: 8px; }
+    .rules-grid { grid-template-columns: 1fr; }
+    .mode-row { grid-template-columns: 1fr; }
+    .diff-row { grid-template-columns: 1fr 1fr 1fr; }
+}
+</style>
 </head>
 <body>
 
-<!-- RULES MENU -->
+<!-- ── BACKGROUND CANVAS (particle field, behind game canvas) ── -->
+<canvas id="bgCanvas"></canvas>
+
+<!-- ── GAME CANVAS ─────────────────────────────────────────── -->
+<canvas id="gameCanvas"></canvas>
+
+<!-- ================================================================
+     RULES OVERLAY — first screen the player sees
+     ================================================================ -->
 <div id="rulesOverlay" class="menu-overlay">
-    <div class="terminal-box" style="border-color: #00f2ff; box-shadow: 0 0 40px #00f2ff;">
-        <h1 style="color: #00f2ff;">MISSION BRIEFING</h1>
-        <div class="rules-list">
-            <p>1. <b>PILOTING:</b> The ship follows your mouse cursor with organic drag.</p>
-            <p>2. <b>PULSE (L-CLICK):</b> Clear small enemies. 6s Cooldown.</p>
-            <p>3. <b>SUPERNOVA (R-CLICK):</b> Wipe the screen, including Bosses. 25s Cooldown.</p>
-            <p>4. <b>ESCAPE:</b> Use the <b>ESC</b> key to pause the simulation.</p>
-            <p>5. <b>SURVIVAL:</b> Do not touch the red Sentrons. Good luck.</p>
-            <p>6. <b>⚡ SURVIVAL MODE:</b> Side-scrolling blitz. Move with <b>A/D</b> or <b>←/→</b>, shoot with <b>SPACE</b>. Kill bosses for <b>coins</b>. After Wave 3, power-ups only drop from bosses — buy more from your <b>INVENTORY</b> when paused.</p>
+    <div class="terminal-box" style="max-width:540px;width:92vw;">
+        <div class="glow-border"></div>
+        <div class="corner-dots tl"></div>
+        <div class="corner-dots tr"></div>
+        <div class="corner-dots bl"></div>
+        <div class="corner-dots br"></div>
+
+        <span class="game-logo" data-text="SENTRON">SENTRON</span>
+        <span class="logo-sub">Combat Protocol v2.0</span>
+
+        <div class="stat-row">
+            <div class="stat-chip">🖱 LEFT CLICK — PULSE</div>
+            <div class="stat-chip">🖱 RIGHT CLICK — SUPERNOVA</div>
         </div>
-        <button class="btn" style="background:#00f2ff; color:#000;" onclick="showLogin()">CONTINUE</button>
-    </div>
-</div>
 
-<!-- LOGIN -->
-<div id="loginOverlay" class="menu-overlay" style="display: none;">
-    <div class="terminal-box">
-        <h1 style="color: #ff0044;">SYSTEM ACCESS</h1>
-        <input type="text" id="playerInput" placeholder="ENTER PILOT ID" maxlength="12"
-               style="width: 80%; padding: 15px; background: #111; border: 2px solid #ff0044; color: #ff0044; text-align: center; font-size: 20px; outline: none;">
-        <br><br>
-        <button class="btn" onclick="goToShipSelect()">INITIALIZE</button>
-    </div>
-</div>
-
-<!-- SHIP SELECT -->
-<div id="shipMenu" class="menu-overlay" style="display: none;">
-    <div class="terminal-box" style="border-color: #00f2ff;">
-        <h2 style="color: #00f2ff;">SELECT YOUR CRAFT</h2>
-        <div class="ship-grid">
-            <div class="ship-card selected" id="s1" onclick="pickShip('rocket.png', 's1')">
-                <img src="rocket.png"><p>S-1</p>
+        <div class="rules-grid">
+            <div class="rule-item">
+                <span class="rule-icon">🎮</span>
+                <div class="rule-text"><strong>Classic Mode</strong>Survive waves of enemies. Left-click to pulse. Right-click for Supernova.</div>
             </div>
-            <div class="ship-card" id="s2" onclick="pickShip('rocket-neon.png', 's2')">
-                <img src="rocket-neon.png"><p>S-2</p>
+            <div class="rule-item">
+                <span class="rule-icon">⚔️</span>
+                <div class="rule-text"><strong>Survival Mode</strong>WASD to move. Space to shoot. Kill streaks earn coins. Buy upgrades.</div>
             </div>
-            <div class="ship-card" id="s3" onclick="pickShip('rocket-gold.png', 's3')">
-                <img src="rocket-gold.png"><p>S-3</p>
+            <div class="rule-item">
+                <span class="rule-icon">💰</span>
+                <div class="rule-text"><strong>Economy</strong>Kill enemies for coins. 10 kills in a row = bonus coin. Buy power-ups from inventory.</div>
+            </div>
+            <div class="rule-item">
+                <span class="rule-icon">🔥</span>
+                <div class="rule-text"><strong>Combo System</strong>Chaining kills multiplies your score. Breaking a combo costs NO lives.</div>
             </div>
         </div>
-        <button class="btn" onclick="startGame(1)">EASY</button>
-        <button class="btn" onclick="startGame(2)">NORMAL</button>
-        <button class="btn" onclick="startGame(3)">HARDCORE</button>
-        <br>
-        <button class="btn-survival" onclick="startSurvival()">⚡ SURVIVAL</button>
+
+        <button class="btn btn-primary" onclick="showLogin()">
+            INITIALIZE PILOT ▶
+        </button>
     </div>
 </div>
 
-<!-- CLASSIC PAUSE -->
-<div id="pauseMenu" class="menu-overlay">
-    <div class="terminal-box" style="border-color: #ffff00; box-shadow: 0 0 40px #ffff00;">
-        <h1 style="color: #ffff00;">SYSTEM PAUSED</h1>
-        <button class="btn" style="background:#ffff00; color:#000;" onclick="togglePause()">RESUME</button>
-        <button class="btn" onclick="location.reload()">QUIT</button>
-    </div>
-</div>
+<!-- ================================================================
+     LOGIN OVERLAY — player name entry
+     ================================================================ -->
+<div id="loginOverlay" class="menu-overlay" style="display:none;">
+    <div class="terminal-box" style="max-width:400px;width:88vw;">
+        <div class="glow-border"></div>
+        <div class="corner-dots tl"></div>
+        <div class="corner-dots tr"></div>
 
-<!-- GAME OVER -->
-<div id="gameOverScreen" class="menu-overlay" style="display: none;">
-    <div class="terminal-box">
-        <h1 style="color: #ff0044;">PILOT ELIMINATED</h1>
-        <div style="font-size: 48px; color: #00f2ff; margin: 20px 0;" id="finalScoreDisplay">0</div>
-        <button class="btn" onclick="backToMenu()">REDEPLOY</button>
-    </div>
-</div>
+        <span class="game-logo" style="font-size:2.6rem;" data-text="SENTRON">SENTRON</span>
+        <span class="logo-sub">Pilot Registration</span>
 
-<!-- SURVIVAL GAME OVER -->
-<div id="survivalOverScreen" class="menu-overlay" style="display: none;">
-    <div class="terminal-box" style="border-color:#ffaa00; box-shadow:0 0 40px #ffaa00;">
-        <h1 style="color: #ffaa00;">⚡ PILOT DOWN</h1>
-        <p style="color:#aaa; margin-bottom:6px;">WAVE REACHED</p>
-        <div style="font-size: 48px; color: #ffaa00; margin: 4px 0;" id="survFinalWave">1</div>
-        <p style="color:#aaa; margin-bottom:6px;">FINAL SCORE</p>
-        <div style="font-size: 36px; color: #00f2ff; margin: 4px 0 20px;" id="survFinalScore">0</div>
-
-        <div class="surv-new-best-tag" id="survNewBestTag">★ NEW SESSION BEST ★</div>
-        <div class="surv-best-line" id="survSessionBest">SESSION BEST — WAVE 1 · SCORE 0</div>
-
-        <button class="btn-survival" onclick="startSurvival()">⚡ REDEPLOY</button>
-        <button class="btn" onclick="backToMenu()">SHIP SELECT</button>
-    </div>
-</div>
-
-<!-- SURVIVAL PAUSE MENU (separate from classic pause) -->
-<div id="survivalPauseMenu">
-    <div class="terminal-box" style="border-color:#ffaa00; box-shadow:0 0 40px #ffaa00;">
-        <h1 style="color:#ffaa00; letter-spacing:4px; margin-bottom:6px;">⚡ PAUSED</h1>
-        <p style="color:#ffffff44; font-size:0.65rem; letter-spacing:3px; margin-bottom:28px;">SIMULATION HALTED</p>
-
-        <div style="display:flex; flex-direction:column; align-items:center; gap:12px;">
-            <button class="btn" style="background:#ffaa00; color:#000; width:220px;"
-                onclick="togglePause()">▶ RESUME</button>
-
-            <button class="btn" style="background:transparent; border:2px solid #ffaa00; color:#ffaa00; width:220px;"
-                onclick="openSurvivalInventory()">🎒 INVENTORY SHOP</button>
-
-            <button class="btn" style="background:transparent; border:2px solid #ff0044; color:#ff0044; width:220px;"
-                onclick="backToMenu()">✕ QUIT TO MENU</button>
+        <div class="input-group">
+            <label>CALLSIGN / PILOT NAME</label>
+            <input
+                id="playerInput"
+                class="game-input"
+                type="text"
+                placeholder="Enter your name..."
+                maxlength="30"
+                onkeydown="if(event.key==='Enter')goToShipSelect()"
+                autocomplete="off"
+                spellcheck="false"
+            >
         </div>
-    </div>
-</div>
 
-<!-- SURVIVAL INVENTORY SHOP -->
-<div id="survivalInventory">
-    <div class="inventory-box">
-        <div class="inventory-header">
-            <span class="inventory-title">🎒 INVENTORY SHOP</span>
-            <span class="inventory-coin-display" id="invCoinDisplay">🪙 0</span>
-        </div>
-        <p class="inventory-subtitle">BUY POWER-UPS WITH COINS — EARNED FROM BOSS KILLS</p>
+        <div class="divider"><span>select a vessel to continue</span></div>
 
-        <div id="inventoryGrid"></div>
+        <button class="btn btn-primary" onclick="goToShipSelect()">
+            CONFIRM PILOT ▶
+        </button>
 
-        <p style="font-size:0.55rem; color:#ffffff22; letter-spacing:2px; margin-bottom:16px;">
-            SLOTS FULL? OLDEST SLOT WILL BE REPLACED. POWER-UPS USED FROM BOTTOM BAR IN-GAME.
+        <p style="font-size:0.46rem;color:rgba(255,255,255,0.22);letter-spacing:0.15em;margin-top:14px;">
+            LEAVE BLANK TO USE DEFAULT CALLSIGN
         </p>
-
-        <button class="inv-back-btn" onclick="closeSurvivalInventory()">← BACK TO PAUSE</button>
     </div>
 </div>
 
-<!-- CLASSIC HUD -->
-<div class="ui-layer" style="display:none;">
-    <div class="hud-item">SCORE: <span id="scr">0</span></div>
-    <div class="hud-item">PULSE: <span id="pCharge">READY</span></div>
-    <div class="hud-item">SUPER: <span id="sCharge">READY</span></div>
+<!-- ================================================================
+     SHIP MENU — vessel select + mode launch
+     ================================================================ -->
+<div id="shipMenu" class="menu-overlay" style="display:none;">
+    <div class="terminal-box" style="max-width:580px;width:94vw;max-height:94vh;overflow-y:auto;">
+        <div class="glow-border"></div>
+        <div class="corner-dots tl"></div>
+        <div class="corner-dots tr"></div>
+        <div class="corner-dots bl"></div>
+        <div class="corner-dots br"></div>
+
+        <span class="game-logo" style="font-size:2.2rem;margin-bottom:2px;" data-text="SENTRON">SENTRON</span>
+        <span class="logo-sub" style="margin-bottom:20px;">Select Vessel</span>
+
+        <span class="section-title">Choose Your Ship</span>
+        <div class="ship-grid">
+            <div class="ship-card selected" id="ship1" onclick="pickShip('rocket.png','ship1')">
+                <img src="rocket.png" alt="Rocket" onerror="this.style.display='none';this.parentNode.querySelector('.ship-emoji').style.display='block'">
+                <span class="ship-emoji" style="display:none;font-size:2rem;">🚀</span>
+                <span class="ship-name">VIPER</span>
+                <span class="ship-stat">Speed ●●●○○</span>
+            </div>
+            <div class="ship-card" id="ship2" onclick="pickShip('ship2.png','ship2')">
+                <img src="ship2.png" alt="Ship 2" onerror="this.style.display='none';this.parentNode.querySelector('.ship-emoji').style.display='block'">
+                <span class="ship-emoji" style="display:none;font-size:2rem;">🛸</span>
+                <span class="ship-name">PHANTOM</span>
+                <span class="ship-stat">Speed ●●○○○</span>
+            </div>
+            <div class="ship-card" id="ship3" onclick="pickShip('ship3.png','ship3')">
+                <img src="ship3.png" alt="Ship 3" onerror="this.style.display='none';this.parentNode.querySelector('.ship-emoji').style.display='block'">
+                <span class="ship-emoji" style="display:none;font-size:2rem;">✈️</span>
+                <span class="ship-name">STRIKER</span>
+                <span class="ship-stat">Speed ●●●●○</span>
+            </div>
+        </div>
+
+        <div class="divider"><span>choose your combat protocol</span></div>
+
+        <div class="mode-row">
+            <!-- CLASSIC MODE -->
+            <div class="mode-card">
+                <span class="mode-icon">🎮</span>
+                <span class="mode-title">CLASSIC</span>
+                <span class="mode-desc">Mouse-controlled. Survive endless waves. Pulse and Supernova attacks.</span>
+                <div class="diff-row" style="margin-top:14px;">
+                    <button class="btn" style="border-color:#00ffaa;color:#00ffaa;font-size:0.6rem;" onclick="startGame(1)">EASY</button>
+                    <button class="btn btn-amber" style="font-size:0.6rem;" onclick="startGame(2)">NORMAL</button>
+                    <button class="btn btn-danger" style="font-size:0.6rem;" onclick="startGame(3)">HARD</button>
+                </div>
+            </div>
+
+            <!-- SURVIVAL MODE -->
+            <div class="mode-card survival-card" onclick="startSurvival()" style="cursor:pointer;">
+                <span class="mode-icon">⚔️</span>
+                <span class="mode-title" style="color:var(--purple);">SURVIVAL</span>
+                <span class="mode-desc">WASD + Space. Kill streaks. Coins. 30 power-ups. Boss phases. How long can you last?</span>
+                <div style="margin-top:14px;">
+                    <button class="btn btn-purple" style="font-size:0.68rem;" onclick="event.stopPropagation();startSurvival()">
+                        LAUNCH SURVIVAL ▶
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
-<!-- SURVIVAL HUD -->
-<div id="survivalHUD">
-    <div class="s-hud-cell">
-        <span class="s-hud-label">LIVES</span>
-        <span class="s-hud-val" id="sLives">❤️❤️❤️</span>
-    </div>
-    <div class="s-hud-cell">
-        <span class="s-hud-label">WAVE</span>
-        <span class="s-hud-val white" id="sWave">1</span>
-    </div>
-    <div class="s-hud-cell">
-        <span class="s-hud-label">SCORE</span>
-        <span class="s-hud-val cyan" id="sScore">0</span>
-    </div>
-    <div class="s-hud-cell">
-        <span class="s-hud-label">COINS</span>
-        <span class="s-hud-val gold" id="sCoins">0</span>
+<!-- ================================================================
+     PAUSE MENU
+     ================================================================ -->
+<div id="pauseMenu" class="menu-overlay" style="display:none;">
+    <div class="terminal-box" style="min-width:300px;width:88vw;max-width:380px;">
+        <div class="corner-dots tl"></div>
+        <div class="corner-dots tr"></div>
+        <p style="font-size:0.5rem;letter-spacing:0.5em;color:var(--amber);margin-bottom:20px;">SYSTEM PAUSE</p>
+        <span class="game-logo" style="font-size:2.2rem;margin-bottom:24px;" data-text="PAUSED">PAUSED</span>
+        <button class="btn btn-primary" onclick="togglePause()">▶ RESUME</button>
+        <button class="btn btn-danger" onclick="backToMenu()" style="margin-top:4px;">✕ QUIT</button>
     </div>
 </div>
 
-<!-- POWER-UP BAR -->
-<div id="powerupBar-label">POWER-UPS &nbsp; [ 1 ] &nbsp; [ 2 ] &nbsp; [ 3 ] &nbsp; [ 4 ]</div>
+<!-- ================================================================
+     CLASSIC HUD
+     ================================================================ -->
+<div class="ui-layer">
+    <div class="hud-bar">
+        <div class="hud-item">
+            <span class="hud-label">Score</span>
+            <span class="hud-value" id="scr">0</span>
+        </div>
+        <div class="hud-item">
+            <span class="game-logo" style="font-size:1.1rem;" data-text="SENTRON">SENTRON</span>
+        </div>
+        <div class="hud-item" style="flex-direction:row;gap:20px;">
+            <div class="hud-item">
+                <span class="hud-label">Pulse</span>
+                <span class="hud-value" id="pCharge">READY</span>
+            </div>
+            <div class="hud-item">
+                <span class="hud-label">Nova</span>
+                <span class="hud-value" id="sCharge">READY</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ================================================================
+     CLASSIC GAME OVER SCREEN
+     ================================================================ -->
+<div id="gameOverScreen" class="menu-overlay" style="display:none;">
+    <div class="terminal-box" style="max-width:400px;width:88vw;">
+        <div class="glow-border" style="background:conic-gradient(from 0deg, transparent 0%, var(--red) 10%, transparent 20%);"></div>
+        <div class="corner-dots tl" style="background:var(--red);"></div>
+        <div class="corner-dots tr" style="background:var(--red);"></div>
+
+        <p style="font-size:0.5rem;letter-spacing:0.5em;color:var(--red);margin-bottom:12px;">MISSION FAILED</p>
+        <span class="game-logo" style="font-size:2rem;color:var(--red);text-shadow:0 0 20px var(--red);margin-bottom:20px;" data-text="DESTROYED">DESTROYED</span>
+
+        <p class="label-small">FINAL SCORE</p>
+        <span class="big-score" id="finalScoreDisplay">0</span>
+
+        <div class="divider" style="margin:20px 0;"><span>choose next action</span></div>
+
+        <button class="btn btn-primary" onclick="backToMenu();document.getElementById('shipMenu').style.display='flex';">
+            ↩ RETURN TO BASE
+        </button>
+    </div>
+</div>
+
+<!-- ================================================================
+     SURVIVAL HUD
+     ================================================================ -->
+<div id="survivalHUD" style="display:none;">
+    <div class="surv-stat">
+        <span class="surv-label">Lives</span>
+        <span class="surv-value" id="sLives">❤️❤️❤️</span>
+    </div>
+    <div class="surv-stat">
+        <span class="surv-label">Wave</span>
+        <span class="surv-value" id="sWave">1</span>
+    </div>
+    <div class="surv-stat" style="margin:0 8px;">
+        <span class="surv-label">Score</span>
+        <span class="surv-value" id="sScore">0</span>
+    </div>
+    <div class="surv-stat">
+        <span class="surv-label">Coins</span>
+        <span class="surv-value" id="sCoins">0</span>
+    </div>
+</div>
+
+<!-- ================================================================
+     POWER-UP BAR
+     ================================================================ -->
+<div id="powerupBar-label">POWER-UPS — [ 1 ]  [ 2 ]  [ 3 ]  [ 4 ]</div>
 <div id="powerupBar"></div>
 
-<canvas id="gameCanvas"></canvas>
+<!-- ================================================================
+     SURVIVAL OVER SCREEN
+     ================================================================ -->
+<div id="survivalOverScreen" class="menu-overlay" style="display:none;">
+    <div class="terminal-box" style="max-width:440px;width:92vw;">
+        <div class="glow-border" style="background:conic-gradient(from 0deg, transparent 0%, var(--purple) 10%, transparent 20%);"></div>
+        <div class="corner-dots tl" style="background:var(--purple);"></div>
+        <div class="corner-dots tr" style="background:var(--purple);"></div>
+
+        <p style="font-size:0.5rem;letter-spacing:0.5em;color:var(--purple);margin-bottom:12px;">TRANSMISSION LOST</p>
+        <span class="game-logo" style="font-size:2rem;color:var(--purple);text-shadow:0 0 20px var(--purple);margin-bottom:18px;" data-text="DESTROYED">DESTROYED</span>
+
+        <div class="wave-badge">
+            ⚔️ REACHED &nbsp;—&nbsp; WAVE <span id="survFinalWave" style="font-weight:900;">0</span>
+        </div>
+
+        <p class="label-small" style="margin-top:16px;">FINAL SCORE</p>
+        <span class="big-score" id="survFinalScore" style="color:var(--purple);text-shadow:0 0 30px var(--purple);">0</span>
+
+        <div id="survNewBestTag" class="new-best-tag">⭐ NEW BEST</div>
+
+        <p class="best-banner" id="survSessionBest"></p>
+
+        <div class="divider" style="margin:18px 0;"><span>deploy again?</span></div>
+
+        <button class="btn btn-purple" onclick="startSurvival()">↺ REDEPLOY</button>
+        <button class="btn" onclick="backToMenu()" style="margin-top:4px;">↩ MAIN BASE</button>
+    </div>
+</div>
+
+<!-- ================================================================
+     BACKGROUND CANVAS SCRIPT (animated particle bg for menus)
+     ================================================================ -->
+<script>
+(function() {
+    const bg = document.getElementById('bgCanvas');
+    const bctx = bg.getContext('2d');
+    let W = bg.width = window.innerWidth;
+    let H = bg.height = window.innerHeight;
+
+    // Stars
+    const STAR_COUNT = 160;
+    const stars = Array.from({length:STAR_COUNT},()=>({
+        x: Math.random()*W, y: Math.random()*H,
+        r: Math.random()*1.4+0.2,
+        spd: Math.random()*0.35+0.05,
+        bright: Math.random()*0.55+0.15,
+        twink: Math.random()*Math.PI*2,
+        twinkSpd: Math.random()*0.04+0.01,
+    }));
+
+    // Nebula blobs (drifting gradient circles)
+    const nebulas = [
+        {x:W*0.2, y:H*0.25, r:W*0.28, hue:220, vx:0.05, vy:0.03},
+        {x:W*0.8, y:H*0.6,  r:W*0.22, hue:290, vx:-0.04,vy:0.05},
+        {x:W*0.5, y:H*0.8,  r:W*0.18, hue:180, vx:0.03, vy:-0.04},
+    ];
+
+    // Floating particles
+    const floaters = Array.from({length:28},()=>({
+        x: Math.random()*W, y: Math.random()*H,
+        vx:(Math.random()-0.5)*0.22, vy:(Math.random()-0.5)*0.22,
+        r: Math.random()*1.8+0.5,
+        hue: Math.random()<0.6?190:280,
+        alpha: Math.random()*0.35+0.1,
+    }));
+
+    function draw(t) {
+        bctx.clearRect(0,0,W,H);
+
+        // Nebula blobs
+        nebulas.forEach(n=>{
+            n.x+=n.vx; n.y+=n.vy;
+            if(n.x<-n.r||n.x>W+n.r)n.vx*=-1;
+            if(n.y<-n.r||n.y>H+n.r)n.vy*=-1;
+            const g=bctx.createRadialGradient(n.x,n.y,0,n.x,n.y,n.r);
+            g.addColorStop(0,`hsla(${n.hue},80%,20%,0.055)`);
+            g.addColorStop(1,`hsla(${n.hue},80%,10%,0)`);
+            bctx.fillStyle=g;
+            bctx.beginPath();bctx.arc(n.x,n.y,n.r,0,Math.PI*2);bctx.fill();
+        });
+
+        // Stars with twinkle
+        stars.forEach(s=>{
+            s.y+=s.spd;
+            if(s.y>H+2){s.y=-2;s.x=Math.random()*W;}
+            const alpha=s.bright+Math.sin(t*s.twinkSpd+s.twink)*0.12;
+            bctx.save();
+            bctx.globalAlpha=Math.max(0.05,alpha);
+            bctx.fillStyle='#ffffff';
+            bctx.shadowColor='#ffffff';
+            bctx.shadowBlur = s.r>1?4:0;
+            bctx.beginPath();bctx.arc(s.x,s.y,s.r,0,Math.PI*2);bctx.fill();
+            bctx.restore();
+        });
+
+        // Floating glowing particles
+        floaters.forEach(f=>{
+            f.x+=f.vx; f.y+=f.vy;
+            if(f.x<-5)f.x=W+5; if(f.x>W+5)f.x=-5;
+            if(f.y<-5)f.y=H+5; if(f.y>H+5)f.y=-5;
+            bctx.save();
+            bctx.globalAlpha=f.alpha*(0.8+Math.sin(t*0.002+f.x)*0.2);
+            bctx.fillStyle=`hsl(${f.hue},100%,70%)`;
+            bctx.shadowColor=`hsl(${f.hue},100%,60%)`;
+            bctx.shadowBlur=8;
+            bctx.beginPath();bctx.arc(f.x,f.y,f.r,0,Math.PI*2);bctx.fill();
+            bctx.restore();
+        });
+
+        // Horizontal scan line that moves down slowly
+        const scanY=(t*0.04)%H;
+        const scanGrad=bctx.createLinearGradient(0,scanY-60,0,scanY+60);
+        scanGrad.addColorStop(0,'transparent');
+        scanGrad.addColorStop(0.5,`rgba(0,242,255,0.022)`);
+        scanGrad.addColorStop(1,'transparent');
+        bctx.fillStyle=scanGrad;
+        bctx.fillRect(0,scanY-60,W,120);
+
+        requestAnimationFrame(draw);
+    }
+
+    requestAnimationFrame(draw);
+
+    window.addEventListener('resize',()=>{
+        W=bg.width=window.innerWidth;
+        H=bg.height=window.innerHeight;
+    });
+})();
+</script>
+
+<!-- ================================================================
+     HUD VALUE AUTO-STYLE: pulse "READY" green
+     ================================================================ -->
+<script>
+// Auto-apply green class when HUD shows READY
+const observer = new MutationObserver(() => {
+    ['pCharge','sCharge'].forEach(id=>{
+        const el = document.getElementById(id);
+        if (el) el.classList.toggle('hud-ready', el.innerText === 'READY');
+    });
+});
+document.addEventListener('DOMContentLoaded', ()=>{
+    ['pCharge','sCharge'].forEach(id=>{
+        const el = document.getElementById(id);
+        if (el) observer.observe(el,{childList:true,characterData:true,subtree:true});
+    });
+});
+</script>
+
+<!-- ================================================================
+     GAME SCRIPT
+     ================================================================ -->
 <script src="game.js"></script>
 </body>
 </html>
