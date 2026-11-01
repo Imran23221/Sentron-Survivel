@@ -292,7 +292,17 @@ async function logActivity(action) {
     const pName=typeof playerName!=='undefined'&&playerName?playerName:"Pilot";
     const currentScore=typeof score!=='undefined'?score:0;
     const formBody=`player=${encodeURIComponent(pName)}&action=${encodeURIComponent(action)}&score=${encodeURIComponent(currentScore)}`;
-    fetch(url,{method:"POST",mode:"cors",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:formBody}).catch(()=>{});
+    
+    try {
+        fetch(url, {
+            method: "POST",
+            mode: "cors",
+            headers: {"Content-Type": "application/x-www-form-urlencoded"},
+            body: formBody
+        }).catch(() => {});
+    } catch (e) {
+        // Silently bypass network/CORS errors so the game loop never stalls
+    }
 }
 
 
