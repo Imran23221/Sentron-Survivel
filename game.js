@@ -288,23 +288,22 @@ function gameLoop(loopId) {
 }
 
 async function logActivity(action) {
-    const url="https://literate-bassoon-pjvq4xxxv7v7hjrr-8001.app.github.dev/log";
-    const pName=typeof playerName!=='undefined'&&playerName?playerName:"Pilot";
-    const currentScore=typeof score!=='undefined'?score:0;
-    const formBody=`player=${encodeURIComponent(pName)}&action=${encodeURIComponent(action)}&score=${encodeURIComponent(currentScore)}`;
+    const url = "https://literate-bassoon-pjvq4xxxv7v7hjrr-8001.app.github.dev/log";
+    const pName = typeof playerName !== 'undefined' && playerName ? playerName : "Pilot";
+    const currentScore = typeof score !== 'undefined' ? score : 0;
+    const formBody = `player=${encodeURIComponent(pName)}&action=${encodeURIComponent(action)}&score=${encodeURIComponent(currentScore)}`;
     
     try {
         fetch(url, {
             method: "POST",
             mode: "cors",
-            headers: {"Content-Type": "application/x-www-form-urlencoded"},
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
             body: formBody
         }).catch(() => {});
     } catch (e) {
-        // Silently bypass network/CORS errors so the game loop never stalls
+        // Silently swallow any network or CORS errors so the game doesn't crash
     }
 }
-
 
 // =============================================================================
 // ███████╗██╗   ██╗██████╗ ██╗   ██╗██╗██╗   ██╗ █████╗ ██╗
